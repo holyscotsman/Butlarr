@@ -35,18 +35,18 @@ export default function SetupWizard({ onComplete }) {
   const testAndConfigure = async (service, endpoint, data) => {
     setTesting(true)
     setTestResult(null)
-    
+
     try {
-      // Test connection
+      // Test connection - api.post returns JSON directly (not wrapped in .data)
       const testResponse = await api.post(`/api/setup/test/${service}`, data)
-      
-      if (testResponse.data.success) {
+
+      if (testResponse.success) {
         // Configure
         await api.post(`/api/setup/configure/${service}`, data)
         setConfiguredServices(prev => ({ ...prev, [service]: true }))
-        setTestResult({ success: true, message: testResponse.data.message })
+        setTestResult({ success: true, message: testResponse.message })
       } else {
-        setTestResult({ success: false, message: testResponse.data.message })
+        setTestResult({ success: false, message: testResponse.message })
       }
     } catch (error) {
       setTestResult({ success: false, message: error.message })

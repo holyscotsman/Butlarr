@@ -2,130 +2,307 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Base styles */
+/* ============================================================================
+   BUTLARR - CYBERPUNK UI THEME
+   Dark neon aesthetics with enhanced visibility
+   ============================================================================ */
+
+/* CSS Variables for easy theming */
 :root {
-  --cyber-accent: #00ffff;
-  --cyber-pink: #ff00ff;
-  --cyber-dark: #0a0a0f;
+  /* Primary neon colors */
+  --neon-cyan: #00ffff;
+  --neon-magenta: #ff00ff;
+  --neon-pink: #ff2a6d;
+  --neon-purple: #b14aed;
+  --neon-blue: #05d9e8;
+  --neon-green: #39ff14;
+  --neon-yellow: #f0ff00;
+  --neon-orange: #ff6b35;
+  --neon-red: #ff0055;
+
+  /* Background shades */
+  --bg-darkest: #05050a;
+  --bg-darker: #0a0a12;
+  --bg-dark: #0f0f1a;
+  --bg-panel: #141420;
+  --bg-elevated: #1a1a2e;
+
+  /* Border & subtle */
+  --border-dim: #1e1e35;
+  --border-default: #2a2a45;
+  --border-bright: #3a3a5a;
+
+  /* Text */
+  --text-primary: #f0f0f5;
+  --text-secondary: #a0a0b5;
+  --text-muted: #606075;
+
+  /* Glow intensities */
+  --glow-sm: 0 0 10px;
+  --glow-md: 0 0 20px;
+  --glow-lg: 0 0 40px;
+}
+
+/* Base styles - BIGGER fonts for readability */
+html {
+  font-size: 18px; /* Increased from default 16px */
 }
 
 body {
-  @apply bg-cyber-dark text-gray-100 antialiased;
-  font-family: 'Inter', system-ui, sans-serif;
+  @apply antialiased;
+  background: var(--bg-darkest);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  line-height: 1.6;
 }
 
-/* Scrollbar styling */
+/* Scrollbar styling - wider for easier use */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 12px;
+  height: 12px;
 }
 
 ::-webkit-scrollbar-track {
-  @apply bg-cyber-darker;
+  background: var(--bg-darker);
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-cyber-border rounded-full;
+  background: var(--border-bright);
+  border-radius: 6px;
+  border: 2px solid var(--bg-darker);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-cyber-accent/50;
+  background: var(--neon-cyan);
+  box-shadow: var(--glow-sm) var(--neon-cyan);
 }
 
-/* Custom components */
+/* ============================================================================
+   COMPONENT CLASSES
+   ============================================================================ */
+
 @layer components {
+  /* Panels & Cards */
   .cyber-panel {
-    @apply bg-cyber-panel border border-cyber-border rounded-lg;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-default);
+    border-radius: 12px;
   }
 
   .cyber-card {
-    @apply bg-cyber-panel border border-cyber-border rounded-lg p-4 hover:border-cyber-accent/50 transition-colors;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-default);
+    border-radius: 12px;
+    padding: 1.5rem;
+    transition: all 0.3s ease;
   }
 
+  .cyber-card:hover {
+    border-color: var(--neon-cyan);
+    box-shadow: var(--glow-sm) rgba(0, 255, 255, 0.3);
+  }
+
+  /* Buttons - BIGGER touch targets */
   .cyber-button {
-    @apply px-4 py-2 bg-cyber-accent/10 border border-cyber-accent text-cyber-accent 
-           rounded-lg font-medium hover:bg-cyber-accent/20 transition-all
-           focus:outline-none focus:ring-2 focus:ring-cyber-accent/50;
+    @apply px-6 py-3 font-semibold rounded-xl transition-all duration-300 inline-flex items-center justify-center gap-2;
+    background: rgba(0, 255, 255, 0.1);
+    border: 2px solid var(--neon-cyan);
+    color: var(--neon-cyan);
+    font-size: 1rem;
+    min-height: 48px;
+  }
+
+  .cyber-button:hover {
+    background: rgba(0, 255, 255, 0.2);
+    box-shadow: var(--glow-md) rgba(0, 255, 255, 0.4);
+    transform: translateY(-1px);
+  }
+
+  .cyber-button:active {
+    transform: translateY(0);
+  }
+
+  .cyber-button:focus {
+    outline: none;
+    box-shadow: var(--glow-md) rgba(0, 255, 255, 0.5);
   }
 
   .cyber-button-primary {
-    @apply px-4 py-2 bg-cyber-accent text-cyber-dark font-semibold rounded-lg
-           hover:bg-cyber-accent-dim transition-all shadow-cyber
-           focus:outline-none focus:ring-2 focus:ring-cyber-accent/50;
+    @apply px-6 py-3 font-bold rounded-xl transition-all duration-300 inline-flex items-center justify-center gap-2;
+    background: linear-gradient(135deg, var(--neon-cyan) 0%, var(--neon-blue) 100%);
+    border: none;
+    color: var(--bg-darkest);
+    font-size: 1rem;
+    min-height: 48px;
+    box-shadow: var(--glow-sm) rgba(0, 255, 255, 0.5);
+  }
+
+  .cyber-button-primary:hover {
+    box-shadow: var(--glow-lg) rgba(0, 255, 255, 0.6);
+    transform: translateY(-2px);
+  }
+
+  .cyber-button-primary:active {
+    transform: translateY(0);
   }
 
   .cyber-button-danger {
-    @apply px-4 py-2 bg-cyber-red/10 border border-cyber-red text-cyber-red
-           rounded-lg font-medium hover:bg-cyber-red/20 transition-all
-           focus:outline-none focus:ring-2 focus:ring-cyber-red/50;
+    @apply px-6 py-3 font-semibold rounded-xl transition-all duration-300 inline-flex items-center justify-center gap-2;
+    background: rgba(255, 0, 85, 0.1);
+    border: 2px solid var(--neon-red);
+    color: var(--neon-red);
+    font-size: 1rem;
+    min-height: 48px;
   }
 
+  .cyber-button-danger:hover {
+    background: rgba(255, 0, 85, 0.2);
+    box-shadow: var(--glow-md) rgba(255, 0, 85, 0.4);
+  }
+
+  /* Inputs - BIGGER for easier typing */
   .cyber-input {
-    @apply w-full px-4 py-2 bg-cyber-darker border border-cyber-border rounded-lg
-           text-white placeholder-gray-500 focus:border-cyber-accent focus:outline-none
-           focus:ring-1 focus:ring-cyber-accent/50 transition-colors;
+    @apply w-full px-5 py-4 rounded-xl transition-all duration-300;
+    background: var(--bg-darker);
+    border: 2px solid var(--border-default);
+    color: var(--text-primary);
+    font-size: 1.1rem;
+    min-height: 56px;
+  }
+
+  .cyber-input::placeholder {
+    color: var(--text-muted);
+  }
+
+  .cyber-input:focus {
+    outline: none;
+    border-color: var(--neon-cyan);
+    box-shadow: var(--glow-sm) rgba(0, 255, 255, 0.3);
+  }
+
+  .cyber-input:hover:not(:focus) {
+    border-color: var(--border-bright);
   }
 
   .cyber-select {
-    @apply w-full px-4 py-2 bg-cyber-darker border border-cyber-border rounded-lg
-           text-white focus:border-cyber-accent focus:outline-none
-           focus:ring-1 focus:ring-cyber-accent/50 transition-colors appearance-none
-           cursor-pointer;
+    @apply w-full px-5 py-4 rounded-xl transition-all duration-300 cursor-pointer appearance-none;
+    background: var(--bg-darker);
+    border: 2px solid var(--border-default);
+    color: var(--text-primary);
+    font-size: 1.1rem;
+    min-height: 56px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2300ffff'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 1rem center;
+    background-size: 1.5rem;
+    padding-right: 3rem;
   }
 
+  .cyber-select:focus {
+    outline: none;
+    border-color: var(--neon-cyan);
+    box-shadow: var(--glow-sm) rgba(0, 255, 255, 0.3);
+  }
+
+  /* Badges */
   .cyber-badge {
-    @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium;
+    @apply inline-flex items-center px-3 py-1.5 rounded-lg font-semibold;
+    font-size: 0.875rem;
   }
 
   .cyber-badge-success {
-    @apply cyber-badge bg-cyber-green/10 text-cyber-green border border-cyber-green/30;
+    @apply cyber-badge;
+    background: rgba(57, 255, 20, 0.15);
+    color: var(--neon-green);
+    border: 1px solid rgba(57, 255, 20, 0.4);
+    text-shadow: 0 0 10px rgba(57, 255, 20, 0.5);
   }
 
   .cyber-badge-warning {
-    @apply cyber-badge bg-cyber-yellow/10 text-cyber-yellow border border-cyber-yellow/30;
+    @apply cyber-badge;
+    background: rgba(240, 255, 0, 0.15);
+    color: var(--neon-yellow);
+    border: 1px solid rgba(240, 255, 0, 0.4);
+    text-shadow: 0 0 10px rgba(240, 255, 0, 0.5);
   }
 
   .cyber-badge-error {
-    @apply cyber-badge bg-cyber-red/10 text-cyber-red border border-cyber-red/30;
+    @apply cyber-badge;
+    background: rgba(255, 0, 85, 0.15);
+    color: var(--neon-red);
+    border: 1px solid rgba(255, 0, 85, 0.4);
+    text-shadow: 0 0 10px rgba(255, 0, 85, 0.5);
   }
 
   .cyber-badge-info {
-    @apply cyber-badge bg-cyber-blue/10 text-cyber-blue border border-cyber-blue/30;
+    @apply cyber-badge;
+    background: rgba(5, 217, 232, 0.15);
+    color: var(--neon-blue);
+    border: 1px solid rgba(5, 217, 232, 0.4);
+    text-shadow: 0 0 10px rgba(5, 217, 232, 0.5);
   }
 
+  /* Progress bars */
   .cyber-progress {
-    @apply h-2 bg-cyber-darker rounded-full overflow-hidden;
+    @apply h-3 rounded-full overflow-hidden;
+    background: var(--bg-darker);
   }
 
   .cyber-progress-bar {
-    @apply h-full bg-gradient-to-r from-cyber-accent to-cyber-green rounded-full transition-all duration-500;
+    @apply h-full rounded-full transition-all duration-500;
+    background: linear-gradient(90deg, var(--neon-cyan) 0%, var(--neon-green) 100%);
+    box-shadow: var(--glow-sm) rgba(0, 255, 255, 0.5);
   }
 
+  /* Glow effects */
   .cyber-glow {
-    @apply shadow-cyber;
+    box-shadow: var(--glow-md) rgba(0, 255, 255, 0.4);
   }
 
   .cyber-glow-pink {
-    @apply shadow-cyber-pink;
+    box-shadow: var(--glow-md) rgba(255, 0, 255, 0.4);
   }
 
+  .cyber-glow-green {
+    box-shadow: var(--glow-md) rgba(57, 255, 20, 0.4);
+  }
+
+  /* Dividers */
   .cyber-divider {
-    @apply border-t border-cyber-border;
+    border-top: 1px solid var(--border-default);
   }
 
+  /* Links */
   .cyber-link {
-    @apply text-cyber-accent hover:text-cyber-accent-dim underline-offset-4 hover:underline transition-colors;
+    color: var(--neon-cyan);
+    text-decoration: none;
+    transition: all 0.3s ease;
   }
+
+  .cyber-link:hover {
+    text-shadow: var(--glow-sm) var(--neon-cyan);
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
+
+  /* Text utilities */
+  .text-neon-cyan { color: var(--neon-cyan); }
+  .text-neon-magenta { color: var(--neon-magenta); }
+  .text-neon-pink { color: var(--neon-pink); }
+  .text-neon-purple { color: var(--neon-purple); }
+  .text-neon-green { color: var(--neon-green); }
+  .text-neon-yellow { color: var(--neon-yellow); }
+  .text-neon-red { color: var(--neon-red); }
 }
 
-/* Animations */
+/* ============================================================================
+   ANIMATIONS & EFFECTS
+   ============================================================================ */
+
+/* Scanline effect */
 @keyframes scanline {
-  0% {
-    transform: translateY(-100%);
-  }
-  100% {
-    transform: translateY(100vh);
-  }
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
 }
 
 .scanline {
@@ -134,28 +311,28 @@ body {
   left: 0;
   right: 0;
   height: 4px;
-  background: linear-gradient(transparent, var(--cyber-accent), transparent);
-  opacity: 0.1;
-  animation: scanline 8s linear infinite;
+  background: linear-gradient(transparent, var(--neon-cyan), transparent);
+  opacity: 0.15;
+  animation: scanline 6s linear infinite;
   pointer-events: none;
   z-index: 9999;
 }
 
-/* Grid background effect */
+/* Grid background - more visible */
 .cyber-grid {
-  background-image: 
-    linear-gradient(rgba(0, 255, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 255, 255, 0.03) 1px, transparent 1px);
-  background-size: 50px 50px;
+  background-image:
+    linear-gradient(rgba(0, 255, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 40px 40px;
 }
 
-/* Glitch effect (for errors) */
+/* Glitch effect */
 @keyframes glitch {
   0% { transform: translate(0); }
-  20% { transform: translate(-2px, 2px); }
-  40% { transform: translate(-2px, -2px); }
-  60% { transform: translate(2px, 2px); }
-  80% { transform: translate(2px, -2px); }
+  20% { transform: translate(-3px, 3px); }
+  40% { transform: translate(-3px, -3px); }
+  60% { transform: translate(3px, 3px); }
+  80% { transform: translate(3px, -3px); }
   100% { transform: translate(0); }
 }
 
@@ -163,23 +340,128 @@ body {
   animation: glitch 0.3s infinite;
 }
 
-/* Status indicators */
+/* Pulse glow */
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: var(--glow-sm) var(--neon-cyan); }
+  50% { box-shadow: var(--glow-lg) var(--neon-cyan); }
+}
+
+.pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Status indicators - BIGGER and more visible */
 .status-dot {
-  @apply w-2 h-2 rounded-full;
+  @apply rounded-full;
+  width: 12px;
+  height: 12px;
 }
 
 .status-dot-success {
-  @apply status-dot bg-cyber-green shadow-[0_0_8px_rgba(0,255,159,0.5)];
+  @apply status-dot;
+  background: var(--neon-green);
+  box-shadow: 0 0 12px rgba(57, 255, 20, 0.7);
 }
 
 .status-dot-warning {
-  @apply status-dot bg-cyber-yellow shadow-[0_0_8px_rgba(255,255,0,0.5)];
+  @apply status-dot;
+  background: var(--neon-yellow);
+  box-shadow: 0 0 12px rgba(240, 255, 0, 0.7);
 }
 
 .status-dot-error {
-  @apply status-dot bg-cyber-red shadow-[0_0_8px_rgba(255,51,102,0.5)];
+  @apply status-dot;
+  background: var(--neon-red);
+  box-shadow: 0 0 12px rgba(255, 0, 85, 0.7);
 }
 
 .status-dot-info {
-  @apply status-dot bg-cyber-blue shadow-[0_0_8px_rgba(0,153,255,0.5)];
+  @apply status-dot;
+  background: var(--neon-blue);
+  box-shadow: 0 0 12px rgba(5, 217, 232, 0.7);
+}
+
+/* ============================================================================
+   TYPOGRAPHY HELPERS
+   ============================================================================ */
+
+.heading-glow {
+  text-shadow: 0 0 20px var(--neon-cyan);
+}
+
+.text-gradient-cyan {
+  background: linear-gradient(135deg, var(--neon-cyan) 0%, var(--neon-blue) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.text-gradient-pink {
+  background: linear-gradient(135deg, var(--neon-pink) 0%, var(--neon-magenta) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ============================================================================
+   RESPONSIVE ADJUSTMENTS
+   ============================================================================ */
+
+@media (max-width: 768px) {
+  html {
+    font-size: 16px;
+  }
+
+  .cyber-button,
+  .cyber-button-primary,
+  .cyber-button-danger {
+    @apply px-4 py-3;
+    min-height: 44px;
+  }
+
+  .cyber-input,
+  .cyber-select {
+    @apply px-4 py-3;
+    min-height: 48px;
+    font-size: 1rem;
+  }
+}
+
+/* ============================================================================
+   OVERRIDE TAILWIND COLORS WITH OUR NEON PALETTE
+   ============================================================================ */
+
+@layer utilities {
+  /* Background colors */
+  .bg-cyber-dark { background-color: var(--bg-dark); }
+  .bg-cyber-darker { background-color: var(--bg-darker); }
+  .bg-cyber-panel { background-color: var(--bg-panel); }
+
+  /* Border colors */
+  .border-cyber-border { border-color: var(--border-default); }
+
+  /* Accent colors that glow */
+  .bg-cyber-accent { background-color: var(--neon-cyan); }
+  .text-cyber-accent { color: var(--neon-cyan); }
+  .border-cyber-accent { border-color: var(--neon-cyan); }
+
+  .bg-cyber-green { background-color: var(--neon-green); }
+  .text-cyber-green { color: var(--neon-green); }
+  .border-cyber-green { border-color: var(--neon-green); }
+
+  .bg-cyber-red { background-color: var(--neon-red); }
+  .text-cyber-red { color: var(--neon-red); }
+  .border-cyber-red { border-color: var(--neon-red); }
+
+  .bg-cyber-yellow { background-color: var(--neon-yellow); }
+  .text-cyber-yellow { color: var(--neon-yellow); }
+  .border-cyber-yellow { border-color: var(--neon-yellow); }
+
+  .bg-cyber-blue { background-color: var(--neon-blue); }
+  .text-cyber-blue { color: var(--neon-blue); }
+  .border-cyber-blue { border-color: var(--neon-blue); }
+
+  .bg-cyber-pink { background-color: var(--neon-pink); }
+  .text-cyber-pink { color: var(--neon-pink); }
+  .border-cyber-pink { border-color: var(--neon-pink); }
 }

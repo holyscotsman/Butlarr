@@ -20,6 +20,7 @@ from backend.core.scanner.manager import ScanManager
 from backend.api.routes import (
     scan,
     settings,
+    setup,
     issues,
     recommendations,
     bad_movies,
@@ -29,6 +30,7 @@ from backend.api.routes import (
     report,
     websocket_routes,
     system_routes,
+    ai_chat,
 )
 
 # Setup logging first
@@ -83,6 +85,7 @@ app.add_middleware(
 # Mount API routes
 app.include_router(scan.router, prefix="/api")
 app.include_router(settings.router, prefix="/api")
+app.include_router(setup.router, prefix="/api/setup")
 app.include_router(issues.router, prefix="/api")
 app.include_router(recommendations.router, prefix="/api")
 app.include_router(bad_movies.router, prefix="/api")
@@ -90,6 +93,7 @@ app.include_router(dashboard.router, prefix="/api")
 app.include_router(activity.router, prefix="/api")
 app.include_router(health.router, prefix="/api")
 app.include_router(report.router, prefix="/api")
+app.include_router(ai_chat.router, prefix="/api")
 app.include_router(system_routes.router, prefix="/api")
 app.include_router(websocket_routes.router, prefix="/ws")
 
