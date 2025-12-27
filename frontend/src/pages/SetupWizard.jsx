@@ -22,7 +22,8 @@ export default function SetupWizard({ onComplete }) {
   const [configuredServices, setConfiguredServices] = useState({})
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState(null)
-  
+  const [qaMode, setQaMode] = useState(false) // Skip required services for QA testing
+
   // Form states for each service
   const [plex, setPlex] = useState({ url: '', token: '' })
   const [radarr, setRadarr] = useState({ url: '', api_key: '' })
@@ -120,20 +121,44 @@ export default function SetupWizard({ onComplete }) {
 
       case 'plex':
         return (
-          <ServiceSetupStep
-            title="Connect to Plex"
-            description="Plex is required for Butlarr to work. Enter your server details below."
-            required={true}
-            fields={[
-              { key: 'url', label: 'Server URL', value: plex.url, onChange: (v) => setPlex(p => ({ ...p, url: v })), placeholder: 'http://192.168.1.100:32400' },
-              { key: 'token', label: 'X-Plex-Token', value: plex.token, onChange: (v) => setPlex(p => ({ ...p, token: v })), placeholder: 'Your Plex authentication token', type: 'password' },
-            ]}
-            helpText="You can find your Plex token in the XML of any library item URL or in the Plex Web App developer console."
-            onTest={() => testAndConfigure('plex', '/api/setup/test/plex', plex)}
-            testing={testing}
-            testResult={testResult}
-            configured={configuredServices.plex}
-          />
+          <div className="space-y-6">
+            <ServiceSetupStep
+              title="Connect to Plex"
+              description="Plex is required for Butlarr to work. Enter your server details below."
+              required={!qaMode}
+              fields={[
+                { key: 'url', label: 'Server URL', value: plex.url, onChange: (v) => setPlex(p => ({ ...p, url: v })), placeholder: 'http://192.168.1.100:32400' },
+                { key: 'token', label: 'X-Plex-Token', value: plex.token, onChange: (v) => setPlex(p => ({ ...p, token: v })), placeholder: 'Your Plex authentication token', type: 'password' },
+              ]}
+              helpText="You can find your Plex token in the XML of any library item URL or in the Plex Web App developer console."
+              onTest={() => testAndConfigure('plex', '/api/setup/test/plex', plex)}
+              testing={testing}
+              testResult={testResult}
+              configured={configuredServices.plex}
+            />
+
+            {/* QA Mode Skip Option */}
+            {!configuredServices.plex && (
+              <div className="mt-6 p-4 border border-cyber-yellow/30 bg-cyber-yellow/5 rounded-xl">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-cyber-yellow font-medium">QA Testing Mode</p>
+                    <p className="text-sm text-gray-400">Skip Plex setup to test other features</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setQaMode(true)
+                      setConfiguredServices(prev => ({ ...prev, plex: 'skipped' }))
+                      nextStep()
+                    }}
+                    className="px-4 py-2 border border-cyber-yellow text-cyber-yellow rounded-lg hover:bg-cyber-yellow/10 transition-colors"
+                  >
+                    Skip for QA
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         )
 
       case 'radarr':
@@ -291,14 +316,17 @@ export default function SetupWizard({ onComplete }) {
             </p>
             
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-2xl mx-auto mb-8">
-              {Object.entries(configuredServices).map(([service, configured]) => (
+              {Object.entries(configuredServices).map(([service, status]) => (
                 <div key={service} className="cyber-card text-center">
-                  {configured ? (
+                  {status === 'skipped' ? (
+                    <span className="text-cyber-yellow mx-auto block text-lg">⊘</span>
+                  ) : status ? (
                     <Check className="text-cyber-green mx-auto" size={24} />
                   ) : (
                     <X className="text-gray-600 mx-auto" size={24} />
                   )}
                   <p className="text-sm mt-2 capitalize">{service}</p>
+                  {status === 'skipped' && <span className="text-xs text-cyber-yellow">Skipped</span>}
                 </div>
               ))}
             </div>
@@ -313,13 +341,22 @@ export default function SetupWizard({ onComplete }) {
   }
 
   const currentStepData = steps[currentStep]
-  const canProceed = currentStepData.id === 'welcome' || 
+  const canProceed = currentStepData.id === 'welcome' ||
                      currentStepData.id === 'complete' ||
-                     !currentStepData.required || 
-                     configuredServices[currentStepData.id]
+                     !currentStepData.required ||
+                     configuredServices[currentStepData.id] ||
+                     qaMode // Allow proceeding in QA mode
 
   return (
     <div className="min-h-screen bg-cyber-dark cyber-grid flex flex-col">
+      {/* QA Mode Banner */}
+      {qaMode && (
+        <div className="bg-cyber-yellow/20 border-b border-cyber-yellow/50 px-4 py-2 text-center">
+          <span className="text-cyber-yellow font-medium">QA Mode Active</span>
+          <span className="text-gray-400 ml-2">- Some features may not work without Plex</span>
+        </div>
+      )}
+
       {/* Progress bar */}
       <div className="h-1 bg-cyber-darker">
         <div 
@@ -396,6 +433,8 @@ export default function SetupWizard({ onComplete }) {
 }
 
 function ServiceSetupStep({ title, description, fields, helpText, onTest, testing, testResult, configured, required }) {
+  const isConfigured = configured && configured !== 'skipped'
+
   return (
     <div className="space-y-6">
       <div className="text-center mb-8">
@@ -431,7 +470,7 @@ function ServiceSetupStep({ title, description, fields, helpText, onTest, testin
           </div>
         )}
 
-        <button 
+        <button
           onClick={onTest}
           disabled={testing}
           className="cyber-button-primary w-full"
@@ -441,7 +480,7 @@ function ServiceSetupStep({ title, description, fields, helpText, onTest, testin
               <RefreshCw size={18} className="mr-2 animate-spin" />
               Testing...
             </>
-          ) : configured ? (
+          ) : isConfigured ? (
             <>
               <Check size={18} className="mr-2" />
               Connected - Test Again
