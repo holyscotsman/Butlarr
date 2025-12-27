@@ -1,0 +1,42 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>Butlarr</Name>
+  <Repository>butlarr:2512.1.0</Repository>
+  <Registry/>
+  <Network>bridge</Network>
+  <Privileged>false</Privileged>
+  <Support/>
+  <Project>https://github.com/YOUR_USERNAME/butlarr</Project>
+  <Overview>AI-Powered Plex Library Manager. Analyzes your media library using AI to find bad movies, suggest improvements, detect duplicates, and more. Features embedded AI that runs locally - no API keys required!</Overview>
+  <Category>MediaApp:Video</Category>
+  <WebUI>http://[IP]:[PORT:8765]</WebUI>
+  <TemplateURL/>
+  <Icon>https://raw.githubusercontent.com/YOUR_USERNAME/butlarr/main/frontend/public/favicon.svg</Icon>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled></DateInstalled>
+  <DonateText/>
+  <DonateLink/>
+  <Requires/>
+  <Config Name="Web UI Port" Target="8765" Default="8765" Mode="tcp" Description="Web interface port" Type="Port" Display="always" Required="true" Mask="false">8765</Config>
+  <Config Name="App Data" Target="/app/data" Default="/mnt/user/appdata/butlarr" Mode="rw" Description="Application data (database, config, logs, AI models)" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/butlarr</Config>
+  <Config Name="Media Library" Target="/media" Default="/mnt/user" Mode="ro" Description="Path to your media library (read-only)" Type="Path" Display="always" Required="true" Mask="false">/mnt/user</Config>
+  <Config Name="PUID" Target="PUID" Default="99" Mode="" Description="User ID" Type="Variable" Display="advanced" Required="false" Mask="false">99</Config>
+  <Config Name="PGID" Target="PGID" Default="100" Mode="" Description="Group ID" Type="Variable" Display="advanced" Required="false" Mask="false">100</Config>
+  <Config Name="Timezone" Target="TZ" Default="America/New_York" Mode="" Description="Your timezone" Type="Variable" Display="always" Required="false" Mask="false">America/New_York</Config>
+  <Config Name="GitHub Repo" Target="BUTLARR_REPO" Default="" Mode="" Description="Your GitHub repo URL for auto-updates (e.g., https://github.com/username/butlarr.git)" Type="Variable" Display="always" Required="false" Mask="false"></Config>
+  <Config Name="Auto Update" Target="AUTO_UPDATE" Default="true" Mode="" Description="Auto-update from GitHub on container restart" Type="Variable" Display="advanced" Required="false" Mask="false">true</Config>
+  <Config Name="Git Branch" Target="BRANCH" Default="main" Mode="" Description="Git branch to track" Type="Variable" Display="advanced" Required="false" Mask="false">main</Config>
+  <Config Name="Embedded AI" Target="EMBEDDED_AI" Default="true" Mode="" Description="Enable embedded AI model (downloads ~1GB on first run)" Type="Variable" Display="advanced" Required="false" Mask="false">true</Config>
+  <Config Name="Plex URL" Target="PLEX_URL" Default="" Mode="" Description="Plex server URL (e.g., http://192.168.1.100:32400)" Type="Variable" Display="always" Required="false" Mask="false"></Config>
+  <Config Name="Plex Token" Target="PLEX_TOKEN" Default="" Mode="" Description="Your Plex authentication token" Type="Variable" Display="always" Required="false" Mask="true"></Config>
+  <Config Name="Radarr URL" Target="RADARR_URL" Default="" Mode="" Description="Radarr URL (e.g., http://192.168.1.100:7878)" Type="Variable" Display="always" Required="false" Mask="false"></Config>
+  <Config Name="Radarr API Key" Target="RADARR_API_KEY" Default="" Mode="" Description="Radarr API key" Type="Variable" Display="always" Required="false" Mask="true"></Config>
+  <Config Name="Sonarr URL" Target="SONARR_URL" Default="" Mode="" Description="Sonarr URL (e.g., http://192.168.1.100:8989)" Type="Variable" Display="always" Required="false" Mask="false"></Config>
+  <Config Name="Sonarr API Key" Target="SONARR_API_KEY" Default="" Mode="" Description="Sonarr API key" Type="Variable" Display="always" Required="false" Mask="true"></Config>
+  <Config Name="Overseerr URL" Target="OVERSEERR_URL" Default="" Mode="" Description="Overseerr URL" Type="Variable" Display="always" Required="false" Mask="false"></Config>
+  <Config Name="Overseerr API Key" Target="OVERSEERR_API_KEY" Default="" Mode="" Description="Overseerr API key" Type="Variable" Display="always" Required="false" Mask="true"></Config>
+  <Config Name="Anthropic API Key" Target="ANTHROPIC_API_KEY" Default="" Mode="" Description="Anthropic Claude API key (optional - embedded AI works without)" Type="Variable" Display="always" Required="false" Mask="true"></Config>
+  <Config Name="OpenAI API Key" Target="OPENAI_API_KEY" Default="" Mode="" Description="OpenAI API key (optional)" Type="Variable" Display="always" Required="false" Mask="true"></Config>
+</Container>

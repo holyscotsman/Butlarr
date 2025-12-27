@@ -1,0 +1,185 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Base styles */
+:root {
+  --cyber-accent: #00ffff;
+  --cyber-pink: #ff00ff;
+  --cyber-dark: #0a0a0f;
+}
+
+body {
+  @apply bg-cyber-dark text-gray-100 antialiased;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-cyber-darker;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-cyber-border rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-cyber-accent/50;
+}
+
+/* Custom components */
+@layer components {
+  .cyber-panel {
+    @apply bg-cyber-panel border border-cyber-border rounded-lg;
+  }
+
+  .cyber-card {
+    @apply bg-cyber-panel border border-cyber-border rounded-lg p-4 hover:border-cyber-accent/50 transition-colors;
+  }
+
+  .cyber-button {
+    @apply px-4 py-2 bg-cyber-accent/10 border border-cyber-accent text-cyber-accent 
+           rounded-lg font-medium hover:bg-cyber-accent/20 transition-all
+           focus:outline-none focus:ring-2 focus:ring-cyber-accent/50;
+  }
+
+  .cyber-button-primary {
+    @apply px-4 py-2 bg-cyber-accent text-cyber-dark font-semibold rounded-lg
+           hover:bg-cyber-accent-dim transition-all shadow-cyber
+           focus:outline-none focus:ring-2 focus:ring-cyber-accent/50;
+  }
+
+  .cyber-button-danger {
+    @apply px-4 py-2 bg-cyber-red/10 border border-cyber-red text-cyber-red
+           rounded-lg font-medium hover:bg-cyber-red/20 transition-all
+           focus:outline-none focus:ring-2 focus:ring-cyber-red/50;
+  }
+
+  .cyber-input {
+    @apply w-full px-4 py-2 bg-cyber-darker border border-cyber-border rounded-lg
+           text-white placeholder-gray-500 focus:border-cyber-accent focus:outline-none
+           focus:ring-1 focus:ring-cyber-accent/50 transition-colors;
+  }
+
+  .cyber-select {
+    @apply w-full px-4 py-2 bg-cyber-darker border border-cyber-border rounded-lg
+           text-white focus:border-cyber-accent focus:outline-none
+           focus:ring-1 focus:ring-cyber-accent/50 transition-colors appearance-none
+           cursor-pointer;
+  }
+
+  .cyber-badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium;
+  }
+
+  .cyber-badge-success {
+    @apply cyber-badge bg-cyber-green/10 text-cyber-green border border-cyber-green/30;
+  }
+
+  .cyber-badge-warning {
+    @apply cyber-badge bg-cyber-yellow/10 text-cyber-yellow border border-cyber-yellow/30;
+  }
+
+  .cyber-badge-error {
+    @apply cyber-badge bg-cyber-red/10 text-cyber-red border border-cyber-red/30;
+  }
+
+  .cyber-badge-info {
+    @apply cyber-badge bg-cyber-blue/10 text-cyber-blue border border-cyber-blue/30;
+  }
+
+  .cyber-progress {
+    @apply h-2 bg-cyber-darker rounded-full overflow-hidden;
+  }
+
+  .cyber-progress-bar {
+    @apply h-full bg-gradient-to-r from-cyber-accent to-cyber-green rounded-full transition-all duration-500;
+  }
+
+  .cyber-glow {
+    @apply shadow-cyber;
+  }
+
+  .cyber-glow-pink {
+    @apply shadow-cyber-pink;
+  }
+
+  .cyber-divider {
+    @apply border-t border-cyber-border;
+  }
+
+  .cyber-link {
+    @apply text-cyber-accent hover:text-cyber-accent-dim underline-offset-4 hover:underline transition-colors;
+  }
+}
+
+/* Animations */
+@keyframes scanline {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(100vh);
+  }
+}
+
+.scanline {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(transparent, var(--cyber-accent), transparent);
+  opacity: 0.1;
+  animation: scanline 8s linear infinite;
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* Grid background effect */
+.cyber-grid {
+  background-image: 
+    linear-gradient(rgba(0, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 50px 50px;
+}
+
+/* Glitch effect (for errors) */
+@keyframes glitch {
+  0% { transform: translate(0); }
+  20% { transform: translate(-2px, 2px); }
+  40% { transform: translate(-2px, -2px); }
+  60% { transform: translate(2px, 2px); }
+  80% { transform: translate(2px, -2px); }
+  100% { transform: translate(0); }
+}
+
+.glitch {
+  animation: glitch 0.3s infinite;
+}
+
+/* Status indicators */
+.status-dot {
+  @apply w-2 h-2 rounded-full;
+}
+
+.status-dot-success {
+  @apply status-dot bg-cyber-green shadow-[0_0_8px_rgba(0,255,159,0.5)];
+}
+
+.status-dot-warning {
+  @apply status-dot bg-cyber-yellow shadow-[0_0_8px_rgba(255,255,0,0.5)];
+}
+
+.status-dot-error {
+  @apply status-dot bg-cyber-red shadow-[0_0_8px_rgba(255,51,102,0.5)];
+}
+
+.status-dot-info {
+  @apply status-dot bg-cyber-blue shadow-[0_0_8px_rgba(0,153,255,0.5)];
+}

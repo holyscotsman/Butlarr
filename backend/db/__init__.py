@@ -1,0 +1,48 @@
+"""Butlarr database module."""
+
+from backend.db.database import init_db, get_db, get_db_path, close_db
+from backend.db.models import (
+    Base,
+    MediaType,
+    IssueType,
+    IssueSeverity,
+    ScanStatus,
+    ActionType,
+    Movie,
+    TVShow,
+    TVSeason,
+    TVEpisode,
+    Collection,
+    MediaFile,
+    Issue,
+    Recommendation,
+    BadMovieSuggestion,
+    Scan,
+    Activity,
+    AIUsage,
+)
+
+__all__ = [
+    "init_db",
+    "get_db",
+    "get_db_path",
+    "close_db",
+    "Base",
+    "MediaType",
+    "IssueType",
+    "IssueSeverity",
+    "ScanStatus",
+    "ActionType",
+    "Movie",
+    "TVShow",
+    "TVSeason",
+    "TVEpisode",
+    "Collection",
+    "MediaFile",
+    "Issue",
+    "Recommendation",
+    "BadMovieSuggestion",
+    "Scan",
+    "Activity",
+    "AIUsage",
+]

@@ -1,0 +1,46 @@
+# Butlarr Docker Compose
+# For local development or simple deployments
+
+version: '3.8'
+
+services:
+  butlarr:
+    build: .
+    container_name: butlarr
+    restart: unless-stopped
+    ports:
+      - "8765:8765"
+    volumes:
+      # Persistent data (database, config, logs, AI models)
+      - ./data:/app/data
+      # Media library (read-only)
+      - /mnt/user:/media:ro
+    environment:
+      # User/Group IDs (Unraid: 99/100)
+      - PUID=99
+      - PGID=100
+      # Timezone
+      - TZ=America/New_York
+      # Auto-update settings
+      - BUTLARR_REPO=https://github.com/YOUR_USERNAME/butlarr.git
+      - AUTO_UPDATE=true
+      - BRANCH=main
+      # Embedded AI
+      - EMBEDDED_AI=true
+      # Logging
+      - LOG_LEVEL=info
+      # Optional: Service URLs (can also be set in web UI)
+      # - PLEX_URL=http://plex:32400
+      # - PLEX_TOKEN=your_token
+      # - RADARR_URL=http://radarr:7878
+      # - RADARR_API_KEY=your_key
+      # - SONARR_URL=http://sonarr:8989
+      # - SONARR_API_KEY=your_key
+      # - ANTHROPIC_API_KEY=sk-ant-...
+      # - OPENAI_API_KEY=sk-...
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8765/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
