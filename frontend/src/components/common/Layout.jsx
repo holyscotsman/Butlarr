@@ -76,7 +76,7 @@ export default function Layout({ children }) {
         {/* Version */}
         {sidebarOpen && (
           <div className="absolute bottom-4 left-4 right-4 text-center">
-            <span className="text-xs text-gray-600 font-mono">v2512.0.3 Beta</span>
+            <span className="text-sm text-cyber-accent/70 font-mono cyber-glow">v2512.1.0</span>
           </div>
         )}
       </aside>
@@ -84,16 +84,17 @@ export default function Layout({ children }) {
       {/* Main content */}
       <main className={`transition-all duration-300 ${sidebarOpen ? 'ml-64' : 'ml-16'}`}>
         {/* Header */}
-        <header className="h-16 bg-cyber-panel/80 backdrop-blur border-b border-cyber-border flex items-center justify-between px-6">
+        <header className="h-20 bg-cyber-panel/80 backdrop-blur border-b border-cyber-border flex items-center justify-between px-6">
           <div className="flex items-center gap-4">
-            <h1 className="text-lg font-semibold">AI-Powered Plex Library Management</h1>
+            <h1 className="text-xl font-semibold">AI-Powered Plex Library Management</h1>
           </div>
           <div className="flex items-center gap-3">
+            <span className="text-sm text-gray-500 font-mono">v2512.1.0</span>
             <button
               onClick={() => setChatOpen(!chatOpen)}
-              className={`p-2 rounded-lg transition-all ${chatOpen ? 'bg-cyber-accent text-cyber-dark' : 'hover:bg-cyber-border'}`}
+              className={`p-3 rounded-lg transition-all ${chatOpen ? 'bg-cyber-accent text-cyber-dark' : 'hover:bg-cyber-border'}`}
             >
-              <MessageSquare size={20} />
+              <MessageSquare size={24} />
             </button>
           </div>
         </header>

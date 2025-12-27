@@ -89,11 +89,12 @@ export default function SetupWizard({ onComplete }) {
       case 'welcome':
         return (
           <div className="text-center py-12">
-            <div className="w-24 h-24 bg-cyber-accent rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-cyber-lg">
-              <span className="text-cyber-dark font-bold text-5xl">B</span>
+            <div className="w-28 h-28 bg-cyber-accent rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-cyber-lg pulse-glow">
+              <span className="text-cyber-dark font-bold text-6xl">B</span>
             </div>
-            <h2 className="text-3xl font-bold mb-4">Welcome to Butlarr</h2>
-            <p className="text-gray-400 max-w-lg mx-auto mb-8">
+            <h2 className="text-4xl font-bold mb-2 heading-glow">Welcome to Butlarr</h2>
+            <p className="text-sm text-cyber-accent/60 font-mono mb-4">v2512.1.0</p>
+            <p className="text-lg text-gray-400 max-w-lg mx-auto mb-8">
               Your AI-powered Plex library management system. Let's get you set up in just a few minutes.
             </p>
             <div className="space-y-4 text-left max-w-md mx-auto">
