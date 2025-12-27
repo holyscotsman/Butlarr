@@ -27,18 +27,26 @@ echo "
 # -----------------------------------------------------------------------------
 echo "► Setting up permissions (PUID=$PUID, PGID=$PGID)..."
 
-# Create group if it doesn't exist
-if ! getent group butlarr > /dev/null 2>&1; then
-    groupadd -g "$PGID" butlarr
+# Get the group name for the specified GID (might already exist, e.g., 'users' on Unraid)
+EXISTING_GROUP=$(getent group "$PGID" | cut -d: -f1)
+
+if [ -n "$EXISTING_GROUP" ]; then
+    # GID already exists - use that group
+    GROUP_NAME="$EXISTING_GROUP"
+    echo "  Using existing group: $GROUP_NAME (GID $PGID)"
+else
+    # Create new group with specified GID
+    GROUP_NAME="butlarr"
+    groupadd -g "$PGID" "$GROUP_NAME" 2>/dev/null || true
+    echo "  Created group: $GROUP_NAME (GID $PGID)"
 fi
 
 # Create user if it doesn't exist
 if ! getent passwd butlarr > /dev/null 2>&1; then
-    useradd -u "$PUID" -g "$PGID" -d "$APP_DIR" -s /bin/bash butlarr
+    useradd -u "$PUID" -g "$PGID" -d "$APP_DIR" -s /bin/bash butlarr 2>/dev/null || true
 else
     # Update existing user's UID/GID
-    usermod -u "$PUID" butlarr 2>/dev/null || true
-    groupmod -g "$PGID" butlarr 2>/dev/null || true
+    usermod -u "$PUID" -g "$PGID" butlarr 2>/dev/null || true
 fi
 
 # Ensure directories exist
