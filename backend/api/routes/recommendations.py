@@ -269,7 +269,8 @@ async def request_to_overseerr(
         if recommendation.media_type == MediaType.MOVIE:
             await client.request_movie(recommendation.tmdb_id)
         else:
-            await client.request_tv(recommendation.tvdb_id or recommendation.tmdb_id)
+            # Overseerr uses TMDB IDs for TV shows, prefer tmdb_id over tvdb_id
+            await client.request_tv(recommendation.tmdb_id or recommendation.tvdb_id)
         
         # Update recommendation status
         recommendation.is_requested = True

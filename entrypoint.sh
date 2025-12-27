@@ -151,12 +151,37 @@ fi
 # Step 4: Run database migrations
 # -----------------------------------------------------------------------------
 echo "► Checking database..."
-cd "$APP_DIR"
 
-# Run migrations if alembic is configured
-if [ -f "alembic.ini" ]; then
+# Run migrations if alembic is configured (alembic.ini is in backend/)
+if [ -f "$APP_DIR/backend/alembic.ini" ]; then
     echo "  Running database migrations..."
-    gosu butlarr alembic upgrade head 2>/dev/null || echo "  ✓ Database ready (no migrations needed)"
+    cd "$APP_DIR/backend"
+
+    # Check if this is a fresh database (no alembic_version table)
+    # If so, stamp it as current since tables were created by SQLAlchemy
+    if ! gosu butlarr python -c "
+from backend.db.database import get_db_path
+import sqlite3
+db_path = get_db_path()
+if db_path.exists():
+    conn = sqlite3.connect(str(db_path))
+    cursor = conn.execute(\"SELECT name FROM sqlite_master WHERE type='table' AND name='alembic_version'\")
+    has_alembic = cursor.fetchone() is not None
+    conn.close()
+    exit(0 if has_alembic else 1)
+else:
+    exit(1)
+" 2>/dev/null; then
+        # Database exists but no alembic_version table - stamp current version
+        if [ -f "$DATA_DIR/butlarr.db" ]; then
+            echo "  Stamping existing database with current migration..."
+            gosu butlarr alembic stamp head 2>/dev/null || true
+        fi
+    fi
+
+    # Run any pending migrations
+    gosu butlarr alembic upgrade head 2>/dev/null && echo "  ✓ Database migrations complete" || echo "  ✓ Database ready"
+    cd "$APP_DIR"
 else
     echo "  ✓ Database will be initialized on first run"
 fi
