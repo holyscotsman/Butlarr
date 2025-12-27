@@ -3,6 +3,7 @@
 from . import (
     scan,
     settings,
+    setup,
     issues,
     recommendations,
     bad_movies,
@@ -12,11 +13,13 @@ from . import (
     report,
     websocket_routes,
     system_routes,
+    ai_chat,
 )
 
 __all__ = [
     "scan",
     "settings",
+    "setup",
     "issues",
     "recommendations",
     "bad_movies",
@@ -26,4 +29,5 @@ __all__ = [
     "report",
     "websocket_routes",
     "system_routes",
+    "ai_chat",
 ]
