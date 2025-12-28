@@ -57,6 +57,9 @@ mkdir -p "$DATA_DIR"
 mkdir -p "$DATA_DIR/models"
 mkdir -p "$DATA_DIR/logs"
 
+# Fix git ownership issues (common on Unraid/NAS systems)
+git config --global --add safe.directory "$INSTALL_DIR" 2>/dev/null || true
+
 # Step 2: Clone or update repository
 echo -e "${CYAN}► Getting latest code...${NC}"
 if [ -d "$INSTALL_DIR/.git" ]; then
