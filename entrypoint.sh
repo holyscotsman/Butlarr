@@ -52,10 +52,10 @@ fi
 # Ensure directories exist
 mkdir -p "$DATA_DIR" "$MODELS_DIR" "$DATA_DIR/logs" "$DATA_DIR/reports"
 
-# Set ownership
-chown -R butlarr:butlarr "$DATA_DIR"
-chown -R butlarr:butlarr "$APP_DIR/backend" 2>/dev/null || true
-chown -R butlarr:butlarr "$APP_DIR/frontend" 2>/dev/null || true
+# Set ownership using the correct group name (might be 'users' on Unraid, not 'butlarr')
+chown -R butlarr:"$GROUP_NAME" "$DATA_DIR"
+chown -R butlarr:"$GROUP_NAME" "$APP_DIR/backend" 2>/dev/null || true
+chown -R butlarr:"$GROUP_NAME" "$APP_DIR/frontend" 2>/dev/null || true
 
 echo "  ✓ Permissions configured"
 
@@ -148,7 +148,7 @@ if [ "$EMBEDDED_AI" = "true" ] && [ ! -f "$MODEL_FILE" ]; then
     fi
     
     if [ -f "$MODEL_FILE" ]; then
-        chown butlarr:butlarr "$MODEL_FILE"
+        chown butlarr:"$GROUP_NAME" "$MODEL_FILE"
         echo "  ✓ Model downloaded successfully"
     fi
 elif [ "$EMBEDDED_AI" = "true" ] && [ -f "$MODEL_FILE" ]; then
