@@ -31,6 +31,7 @@ from backend.api.routes import (
     websocket_routes,
     system_routes,
     ai_chat,
+    storage,
 )
 
 # Setup logging first
@@ -73,24 +74,20 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS middleware - Configure allowed origins from environment or config
-# In production, restrict this to your actual domain(s)
+# CORS middleware - Configure allowed origins from environment or use permissive defaults
+# For Docker deployments, we allow all origins since the app is typically accessed
+# via various IPs (localhost, LAN IP, Docker network IP, etc.)
 CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "").split(",") if os.environ.get("CORS_ORIGINS") else []
-# Default to localhost for development, but production should set CORS_ORIGINS explicitly
-if not CORS_ORIGINS:
-    CORS_ORIGINS = [
-        "http://localhost:8765",
-        "http://127.0.0.1:8765",
-        "http://localhost:5173",  # Vite dev server
-        "http://127.0.0.1:5173",
-    ]
+
+# If CORS_ORIGINS env var is set to "*", allow all origins
+allow_all_origins = os.environ.get("CORS_ORIGINS") == "*" or not CORS_ORIGINS
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=CORS_ORIGINS,
+    allow_origins=["*"] if allow_all_origins else CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
+    allow_headers=["*"],
 )
 
 # Mount API routes
@@ -106,6 +103,7 @@ app.include_router(health.router, prefix="/api")
 app.include_router(report.router, prefix="/api")
 app.include_router(ai_chat.router, prefix="/api")
 app.include_router(system_routes.router, prefix="/api")
+app.include_router(storage.router, prefix="/api/storage")
 app.include_router(websocket_routes.router, prefix="/ws")
 
 

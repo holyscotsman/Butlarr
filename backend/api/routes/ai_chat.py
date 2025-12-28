@@ -43,20 +43,28 @@ async def chat_with_assistant(
 ):
     """Chat with the AI assistant."""
     config = get_config()
-    
+
     if not config.ai.enabled or not config.ai.assistant_enabled:
         raise HTTPException(status_code=400, detail="AI assistant is disabled")
-    
+
     # Initialize AI provider
     provider = AIProvider(
         anthropic_api_key=config.ai.anthropic_api_key,
         openai_api_key=config.ai.openai_api_key,
         ollama_url=config.ai.ollama_url,
     )
-    
+
+    # Check if any provider is available
+    available = provider.get_available_providers()
+    if not available:
+        raise HTTPException(
+            status_code=400,
+            detail="No AI provider configured. Add an Anthropic or OpenAI API key in Settings, or wait for the embedded AI model to download."
+        )
+
     # Create assistant
     assistant = AssistantChat(provider, config)
-    
+
     # Build conversation history
     history = []
     if request.conversation_history:
@@ -64,10 +72,10 @@ async def chat_with_assistant(
             {"role": msg.role, "content": msg.content}
             for msg in request.conversation_history
         ]
-    
+
     try:
         result = await assistant.chat(request.message, history)
-        
+
         # Log AI usage
         usage = AIUsage(
             provider=result["provider"],
@@ -79,7 +87,7 @@ async def chat_with_assistant(
             purpose="assistant",
         )
         db.add(usage)
-        
+
         activity = Activity(
             action_type=ActionType.AI_QUERY,
             title="AI Assistant Query",
@@ -87,13 +95,16 @@ async def chat_with_assistant(
         )
         db.add(activity)
         await db.commit()
-        
+
         return ChatResponse(
             response=result["response"],
             tokens_used=result["total_tokens"],
             cost_usd=result["cost_usd"],
             model_used=result["model"],
         )
+    except ValueError as e:
+        # Provider-related errors
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI chat failed: {str(e)}")
 

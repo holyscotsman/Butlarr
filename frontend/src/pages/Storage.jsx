@@ -31,12 +31,36 @@ export default function Storage() {
         api.get('/api/storage/undersized'),
         api.get('/api/storage/duplicates'),
       ])
-      setOverview(overviewRes.data)
-      setOversized(oversizedRes.data)
-      setUndersized(undersizedRes.data)
-      setDuplicates(duplicatesRes.data.groups || [])
+      // api.get returns the data directly, not wrapped in .data
+      setOverview(overviewRes || {
+        total_size_bytes: 0,
+        movies_size_bytes: 0,
+        tv_size_bytes: 0,
+        oversized_count: 0,
+        duplicates_count: 0,
+        total_reclaimable_bytes: 0,
+        oversized_excess_bytes: 0,
+        duplicates_waste_bytes: 0,
+      })
+      setOversized(oversizedRes?.items || oversizedRes || [])
+      setUndersized(undersizedRes?.items || undersizedRes || [])
+      setDuplicates(duplicatesRes?.groups || [])
     } catch (error) {
       console.error('Failed to fetch storage data:', error)
+      // Set defaults so page doesn't crash
+      setOverview({
+        total_size_bytes: 0,
+        movies_size_bytes: 0,
+        tv_size_bytes: 0,
+        oversized_count: 0,
+        duplicates_count: 0,
+        total_reclaimable_bytes: 0,
+        oversized_excess_bytes: 0,
+        duplicates_waste_bytes: 0,
+      })
+      setOversized([])
+      setUndersized([])
+      setDuplicates([])
     } finally {
       setLoading(false)
     }

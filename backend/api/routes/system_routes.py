@@ -122,7 +122,20 @@ async def check_for_updates():
             update_in_progress=True,
             message="Update already in progress",
         )
-    
+
+    # Check if .git directory exists (Docker images may not include it)
+    git_dir = Path("/app/.git")
+    if not git_dir.exists():
+        # No git directory - suggest using Docker image updates instead
+        _update_state["last_check"] = datetime.utcnow().isoformat()
+        return UpdateStatus(
+            available=False,
+            current_version=VERSION,
+            update_in_progress=False,
+            last_check=_update_state["last_check"],
+            message="Updates managed via Docker. Restart container with AUTO_UPDATE=true to auto-update, or pull latest image.",
+        )
+
     try:
         # Fetch latest from remote
         result = subprocess.run(
@@ -131,23 +144,40 @@ async def check_for_updates():
             capture_output=True,
             timeout=30,
         )
-        
+
+        # Get current branch
+        try:
+            branch = subprocess.check_output(
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                cwd="/app",
+                stderr=subprocess.DEVNULL,
+            ).decode().strip()
+        except:
+            branch = "main"
+
         # Get local and remote commits
         local = subprocess.check_output(
             ["git", "rev-parse", "HEAD"],
             cwd="/app"
         ).decode().strip()
-        
-        remote = subprocess.check_output(
-            ["git", "rev-parse", "origin/main"],
-            cwd="/app"
-        ).decode().strip()
-        
+
+        try:
+            remote = subprocess.check_output(
+                ["git", "rev-parse", f"origin/{branch}"],
+                cwd="/app"
+            ).decode().strip()
+        except:
+            # Fallback to origin/main
+            remote = subprocess.check_output(
+                ["git", "rev-parse", "origin/main"],
+                cwd="/app"
+            ).decode().strip()
+
         _update_state["last_check"] = datetime.utcnow().isoformat()
         _update_state["latest_commit"] = remote[:8]
-        
+
         available = local != remote
-        
+
         return UpdateStatus(
             available=available,
             current_version=VERSION,
@@ -157,14 +187,19 @@ async def check_for_updates():
             message="Update available!" if available else "Already up to date",
         )
     except subprocess.TimeoutExpired:
-        raise HTTPException(status_code=504, detail="Git fetch timed out")
+        return UpdateStatus(
+            available=False,
+            current_version=VERSION,
+            update_in_progress=False,
+            message="Update check timed out. Try again later.",
+        )
     except Exception as e:
         logger.error("Failed to check for updates", error=str(e))
         return UpdateStatus(
             available=False,
             current_version=VERSION,
             update_in_progress=False,
-            message=f"Failed to check: {str(e)}",
+            message="Updates managed via Docker. Restart container to check for updates.",
         )
 
 

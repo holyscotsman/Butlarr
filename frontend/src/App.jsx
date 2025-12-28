@@ -21,8 +21,9 @@ function App() {
 
   const checkSetupStatus = async () => {
     try {
+      // api.get returns the data directly, not wrapped in .data
       const response = await api.get('/api/setup/status')
-      setSetupComplete(response.data.setup_complete)
+      setSetupComplete(response.setup_complete || response.is_configured || false)
     } catch (error) {
       console.error('Failed to check setup status:', error)
       setSetupComplete(false)

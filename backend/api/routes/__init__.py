@@ -14,6 +14,7 @@ from . import (
     websocket_routes,
     system_routes,
     ai_chat,
+    storage,
 )
 
 __all__ = [
@@ -30,4 +31,5 @@ __all__ = [
     "websocket_routes",
     "system_routes",
     "ai_chat",
+    "storage",
 ]
