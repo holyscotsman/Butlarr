@@ -73,13 +73,24 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS middleware
+# CORS middleware - Configure allowed origins from environment or config
+# In production, restrict this to your actual domain(s)
+CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "").split(",") if os.environ.get("CORS_ORIGINS") else []
+# Default to localhost for development, but production should set CORS_ORIGINS explicitly
+if not CORS_ORIGINS:
+    CORS_ORIGINS = [
+        "http://localhost:8765",
+        "http://127.0.0.1:8765",
+        "http://localhost:5173",  # Vite dev server
+        "http://127.0.0.1:5173",
+    ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
 )
 
 # Mount API routes

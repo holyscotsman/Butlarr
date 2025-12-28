@@ -51,7 +51,10 @@ SCAN_PHASES = [
 
 class ScanManager:
     """Manages library scanning operations."""
-    
+
+    # Class-level lock to prevent race conditions across instances
+    _scan_lock = asyncio.Lock()
+
     def __init__(self, ws_manager):
         self.ws_manager = ws_manager
         self.is_running = False
@@ -61,7 +64,7 @@ class ScanManager:
         self._task: Optional[asyncio.Task] = None
         self._start_time: Optional[datetime] = None
         self._phase_errors: List[Dict] = []
-        
+
         self._stats = {
             "movies_scanned": 0,
             "tv_shows_scanned": 0,
@@ -78,23 +81,26 @@ class ScanManager:
         phases: Optional[List[int]] = None,
         skip_ai_curator: bool = False,
     ):
-        """Start a new scan."""
-        if self.is_running:
-            raise Exception("Scan already running")
-        
-        self.is_running = True
-        self.is_paused = False
-        self.current_scan_id = scan_id
-        self._stop_requested = False
-        self._start_time = datetime.utcnow()
-        self._phase_errors = []
-        self._stats = {k: 0 for k in self._stats}
-        
-        logger.info("Starting scan", scan_id=scan_id, phases=phases, skip_ai=skip_ai_curator)
-        
-        self._task = asyncio.create_task(
-            self._run_scan(scan_id, phases, skip_ai_curator)
-        )
+        """Start a new scan with race condition protection."""
+        # Use lock to prevent race condition where multiple requests could start scans
+        async with self._scan_lock:
+            if self.is_running:
+                raise Exception("Scan already running")
+
+            # Set running state while still holding the lock
+            self.is_running = True
+            self.is_paused = False
+            self.current_scan_id = scan_id
+            self._stop_requested = False
+            self._start_time = datetime.utcnow()
+            self._phase_errors = []
+            self._stats = {k: 0 for k in self._stats}
+
+            logger.info("Starting scan", scan_id=scan_id, phases=phases, skip_ai=skip_ai_curator)
+
+            self._task = asyncio.create_task(
+                self._run_scan(scan_id, phases, skip_ai_curator)
+            )
     
     async def stop_scan(self):
         """Stop the current scan."""
