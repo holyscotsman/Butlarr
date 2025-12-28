@@ -173,7 +173,7 @@ class BadMovieCriteria(BaseModel):
 class Settings(BaseSettings):
     """Main application settings from environment."""
     app_name: str = "Butlarr"
-    app_version: str = "2512.0.3"
+    app_version: str = "2512.2.0"
     app_env: str = "production"
     debug: bool = False
     
