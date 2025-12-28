@@ -44,11 +44,21 @@ class SonarrConfig(BaseModel):
         return bool(self.url and self.api_key)
 
 
+class BazarrConfig(BaseModel):
+    """Bazarr configuration."""
+    url: str = ""
+    api_key: str = ""
+
+    @property
+    def is_configured(self) -> bool:
+        return bool(self.url and self.api_key)
+
+
 class OverseerrConfig(BaseModel):
     """Overseerr configuration."""
     url: str = ""
     api_key: str = ""
-    
+
     @property
     def is_configured(self) -> bool:
         return bool(self.url and self.api_key)
@@ -180,6 +190,8 @@ class Settings(BaseSettings):
     radarr_api_key: str = ""
     sonarr_url: str = ""
     sonarr_api_key: str = ""
+    bazarr_url: str = ""
+    bazarr_api_key: str = ""
     overseerr_url: str = ""
     overseerr_api_key: str = ""
     tautulli_url: str = ""
@@ -203,6 +215,7 @@ class AppConfig(BaseModel):
     plex: PlexConfig = PlexConfig()
     radarr: RadarrConfig = RadarrConfig()
     sonarr: SonarrConfig = SonarrConfig()
+    bazarr: BazarrConfig = BazarrConfig()
     overseerr: OverseerrConfig = OverseerrConfig()
     tautulli: TautulliConfig = TautulliConfig()
     filebot: FileBotConfig = FileBotConfig()
