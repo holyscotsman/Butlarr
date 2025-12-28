@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import { 
-  Server, Film, Tv, Bell, BarChart, FileText, Sparkles, 
+import { useState, useEffect } from 'react'
+import {
+  Server, Film, Tv, Bell, BarChart, FileText, Sparkles,
   ChevronRight, ChevronLeft, Check, X, RefreshCw, ArrowRight
 } from 'lucide-react'
 import { api } from '../services/api'
@@ -23,6 +23,14 @@ export default function SetupWizard({ onComplete }) {
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState(null)
   const [qaMode, setQaMode] = useState(false) // Skip required services for QA testing
+  const [version, setVersion] = useState(null) // Fetched from API - single source of truth
+
+  // Fetch version from API on mount
+  useEffect(() => {
+    api.get('/api/system/info')
+      .then(data => data && setVersion(data.version))
+      .catch(() => {}) // Silently fail - version display is non-critical
+  }, [])
 
   // Form states for each service
   const [plex, setPlex] = useState({ url: '', token: '' })
@@ -94,7 +102,7 @@ export default function SetupWizard({ onComplete }) {
               <span className="text-cyber-dark font-bold text-6xl">B</span>
             </div>
             <h2 className="text-4xl font-bold mb-2 heading-glow">Welcome to Butlarr</h2>
-            <p className="text-sm text-cyber-accent/60 font-mono mb-4">v2512.2.0</p>
+            {version && <p className="text-sm text-cyber-accent/60 font-mono mb-4">v{version}</p>}
             <p className="text-lg text-gray-400 max-w-lg mx-auto mb-8">
               Your AI-powered Plex library management system. Let's get you set up in just a few minutes.
             </p>

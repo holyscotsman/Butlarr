@@ -10,11 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.db.database import get_db
 from backend.db.models import Scan, ScanStatus
 from backend.utils.config import get_config
+from backend.utils.constants import SCAN
 
 router = APIRouter()
-
-# Valid phase numbers (1-17)
-VALID_PHASES = set(range(1, 18))
 
 
 class ScanStartRequest(BaseModel):
@@ -25,7 +23,7 @@ class ScanStartRequest(BaseModel):
     @field_validator('phases')
     @classmethod
     def validate_phases(cls, v: Optional[List[int]]) -> Optional[List[int]]:
-        """Validate that phase numbers are in valid range (1-17)."""
+        """Validate and normalize phase numbers (1-17)."""
         if v is None:
             return v
 
@@ -33,19 +31,12 @@ class ScanStartRequest(BaseModel):
             raise ValueError("phases list cannot be empty if provided")
 
         # Check for invalid phase numbers
-        invalid = [p for p in v if p not in VALID_PHASES]
+        invalid = [p for p in v if p not in SCAN.VALID_PHASES]
         if invalid:
             raise ValueError(f"Invalid phase number(s): {invalid}. Valid phases are 1-17.")
 
-        # Remove duplicates while preserving order
-        seen = set()
-        unique = []
-        for p in v:
-            if p not in seen:
-                seen.add(p)
-                unique.append(p)
-
-        return sorted(unique)
+        # Deduplicate and sort in one step
+        return sorted(set(v))
 
 
 class ScanProgressResponse(BaseModel):

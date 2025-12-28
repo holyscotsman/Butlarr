@@ -1,3 +1,16 @@
+/**
+ * Settings Page Component
+ *
+ * Displays and manages all application settings including:
+ * - System information and version
+ * - Service connections (Plex, Radarr, Sonarr, Bazarr, etc.)
+ * - AI configuration (cloud APIs and local Ollama)
+ * - Update management
+ *
+ * Note: Sensitive fields (tokens, API keys) are masked with '***' from the API.
+ * When saving, masked values are preserved - only changed values are updated.
+ */
+
 import React, { useState, useEffect } from 'react';
 import {
   Settings as SettingsIcon,
@@ -16,8 +29,87 @@ import {
   XCircle,
   Loader2
 } from 'lucide-react';
+import { api } from '../services/api';
+
+// ============================================================================
+// Reusable Components - Defined outside main component to prevent recreation
+// ============================================================================
+
+/**
+ * Test connection button for services
+ * Shows loading, success, or error state based on test results
+ */
+function TestButton({ service, disabled, testing, testResult, onTest }) {
+  const isLoading = testing[service];
+  const result = testResult[service];
+
+  return (
+    <button
+      onClick={() => onTest(service)}
+      disabled={disabled || isLoading}
+      className="px-3 py-2 bg-cyber-accent/10 hover:bg-cyber-accent/20 border border-cyber-accent/50 rounded-lg text-cyber-accent text-sm flex items-center gap-2 disabled:opacity-50 transition-all"
+    >
+      {isLoading ? (
+        <Loader2 size={16} className="animate-spin" />
+      ) : result?.success ? (
+        <CheckCircle2 size={16} className="text-cyber-green" />
+      ) : result?.success === false ? (
+        <XCircle size={16} className="text-cyber-red" />
+      ) : (
+        <Wifi size={16} />
+      )}
+      Test
+    </button>
+  );
+}
+
+/**
+ * Status badge showing test result message
+ */
+function StatusBadge({ service, testResult }) {
+  const result = testResult[service];
+  if (!result) return null;
+
+  return (
+    <div className={`text-xs mt-1 ${result.success ? 'text-cyber-green' : 'text-cyber-red'}`}>
+      {result.message}
+    </div>
+  );
+}
+
+/**
+ * Service configuration section wrapper
+ */
+function ServiceSection({ title, service, settings, updateSetting, testing, testResult, onTest, children }) {
+  const serviceSettings = settings[service] || {};
+  const hasRequiredFields = service === 'plex'
+    ? serviceSettings.url && serviceSettings.token
+    : serviceSettings.url && serviceSettings.api_key;
+
+  return (
+    <div className="p-4 bg-cyber-darker rounded-lg">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="font-medium text-cyber-accent">{title}</h3>
+        <TestButton
+          service={service}
+          disabled={!hasRequiredFields}
+          testing={testing}
+          testResult={testResult}
+          onTest={onTest}
+        />
+      </div>
+      {children}
+      <StatusBadge service={service} testResult={testResult} />
+    </div>
+  );
+}
+
+// ============================================================================
+// Main Component
+// ============================================================================
 
 export default function Settings() {
+  // State management
   const [systemInfo, setSystemInfo] = useState(null);
   const [updateStatus, setUpdateStatus] = useState(null);
   const [settings, setSettings] = useState({});
@@ -28,23 +120,24 @@ export default function Settings() {
   const [testResults, setTestResults] = useState({});
   const [testing, setTesting] = useState({});
 
+  // Fetch initial data on mount
   useEffect(() => {
     fetchData();
   }, []);
 
+  /**
+   * Fetch system info and settings from API
+   * Uses the api service for consistent error handling
+   */
   const fetchData = async () => {
     try {
-      const [infoRes, settingsRes] = await Promise.all([
-        fetch('/api/system/info'),
-        fetch('/api/settings'),
+      const [infoData, settingsData] = await Promise.all([
+        api.get('/api/system/info').catch(() => null),
+        api.get('/api/settings').catch(() => null),
       ]);
 
-      if (infoRes.ok) {
-        setSystemInfo(await infoRes.json());
-      }
-      if (settingsRes.ok) {
-        setSettings(await settingsRes.json());
-      }
+      if (infoData) setSystemInfo(infoData);
+      if (settingsData) setSettings(settingsData);
     } catch (error) {
       console.error('Failed to fetch data:', error);
     } finally {
@@ -52,13 +145,15 @@ export default function Settings() {
     }
   };
 
+  /**
+   * Check for available updates
+   * Docker containers will show a message about Docker-based updates
+   */
   const checkForUpdates = async () => {
     setCheckingUpdate(true);
     try {
-      const res = await fetch('/api/system/update/check');
-      if (res.ok) {
-        setUpdateStatus(await res.json());
-      }
+      const data = await api.get('/api/system/update/check');
+      setUpdateStatus(data);
     } catch (error) {
       console.error('Failed to check updates:', error);
     } finally {
@@ -66,6 +161,9 @@ export default function Settings() {
     }
   };
 
+  /**
+   * Apply available update (git-based, may not work in Docker)
+   */
   const applyUpdate = async () => {
     if (!confirm('Apply update? The app will need to be restarted after the update completes.')) {
       return;
@@ -73,14 +171,8 @@ export default function Settings() {
 
     setUpdating(true);
     try {
-      const res = await fetch('/api/system/update/apply', { method: 'POST' });
-      if (res.ok) {
-        const data = await res.json();
-        alert(data.message);
-      } else {
-        const error = await res.json();
-        alert(`Update failed: ${error.detail}`);
-      }
+      const data = await api.post('/api/system/update/apply');
+      alert(data.message);
     } catch (error) {
       alert(`Update failed: ${error.message}`);
     } finally {
@@ -88,68 +180,60 @@ export default function Settings() {
     }
   };
 
+  /**
+   * Save all settings to the backend
+   * The API handles filtering out masked values to preserve secrets
+   */
   const saveSettings = async () => {
     setSaveStatus('saving');
     try {
-      const res = await fetch('/api/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settings),
-      });
-
-      if (res.ok) {
-        setSaveStatus('success');
-        setTimeout(() => setSaveStatus(null), 5000);
-      } else {
-        setSaveStatus('error');
-        setTimeout(() => setSaveStatus(null), 5000);
-      }
+      await api.put('/api/settings', settings);
+      setSaveStatus('success');
+      setTimeout(() => setSaveStatus(null), 5000);
     } catch (error) {
+      console.error('Failed to save settings:', error);
       setSaveStatus('error');
       setTimeout(() => setSaveStatus(null), 5000);
     }
   };
 
+  /**
+   * Test connection to a specific service
+   * Maps service names to their test endpoints
+   */
   const testConnection = async (service) => {
     setTesting(prev => ({ ...prev, [service]: true }));
     setTestResults(prev => ({ ...prev, [service]: null }));
 
     try {
-      let endpoint = '';
-      let body = {};
+      // Map service to endpoint and request body
+      const testConfig = {
+        plex: {
+          endpoint: '/api/setup/test/plex',
+          body: { url: settings.plex?.url, token: settings.plex?.token }
+        },
+        radarr: {
+          endpoint: '/api/setup/test/radarr',
+          body: { url: settings.radarr?.url, api_key: settings.radarr?.api_key }
+        },
+        sonarr: {
+          endpoint: '/api/setup/test/sonarr',
+          body: { url: settings.sonarr?.url, api_key: settings.sonarr?.api_key }
+        },
+        bazarr: {
+          endpoint: '/api/setup/test/bazarr',
+          body: { url: settings.bazarr?.url, api_key: settings.bazarr?.api_key }
+        },
+        ollama: {
+          endpoint: '/api/setup/test/ai',
+          body: { ollama_url: settings.ai?.ollama_url }
+        },
+      };
 
-      switch (service) {
-        case 'plex':
-          endpoint = '/api/setup/test/plex';
-          body = { url: settings.plex?.url, token: settings.plex?.token };
-          break;
-        case 'radarr':
-          endpoint = '/api/setup/test/radarr';
-          body = { url: settings.radarr?.url, api_key: settings.radarr?.api_key };
-          break;
-        case 'sonarr':
-          endpoint = '/api/setup/test/sonarr';
-          body = { url: settings.sonarr?.url, api_key: settings.sonarr?.api_key };
-          break;
-        case 'bazarr':
-          endpoint = '/api/setup/test/bazarr';
-          body = { url: settings.bazarr?.url, api_key: settings.bazarr?.api_key };
-          break;
-        case 'ollama':
-          endpoint = '/api/setup/test/ai';
-          body = { ollama_url: settings.ai?.ollama_url };
-          break;
-        default:
-          return;
-      }
+      const config = testConfig[service];
+      if (!config) return;
 
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-
-      const data = await res.json();
+      const data = await api.post(config.endpoint, config.body);
       setTestResults(prev => ({
         ...prev,
         [service]: { success: data.success, message: data.message }
@@ -164,6 +248,10 @@ export default function Settings() {
     }
   };
 
+  /**
+   * Update a specific setting value
+   * Maintains immutability for React state updates
+   */
   const updateSetting = (section, key, value) => {
     setSettings(prev => ({
       ...prev,
@@ -174,36 +262,7 @@ export default function Settings() {
     }));
   };
 
-  const TestButton = ({ service, disabled }) => (
-    <button
-      onClick={() => testConnection(service)}
-      disabled={disabled || testing[service]}
-      className="px-3 py-2 bg-cyber-accent/10 hover:bg-cyber-accent/20 border border-cyber-accent/50 rounded-lg text-cyber-accent text-sm flex items-center gap-2 disabled:opacity-50 transition-all"
-    >
-      {testing[service] ? (
-        <Loader2 size={16} className="animate-spin" />
-      ) : testResults[service]?.success ? (
-        <CheckCircle2 size={16} className="text-cyber-green" />
-      ) : testResults[service]?.success === false ? (
-        <XCircle size={16} className="text-cyber-red" />
-      ) : (
-        <Wifi size={16} />
-      )}
-      Test
-    </button>
-  );
-
-  const StatusBadge = ({ service }) => {
-    const result = testResults[service];
-    if (!result) return null;
-
-    return (
-      <div className={`text-xs mt-1 ${result.success ? 'text-cyber-green' : 'text-cyber-red'}`}>
-        {result.message}
-      </div>
-    );
-  };
-
+  // Loading state
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -214,12 +273,13 @@ export default function Settings() {
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
+      {/* Page Header */}
       <div className="flex items-center gap-3">
         <SettingsIcon className="w-8 h-8 text-cyber-accent" />
         <h1 className="text-2xl font-bold">Settings</h1>
       </div>
 
-      {/* Save Status Banner */}
+      {/* Save Status Banner - Shows feedback after save attempts */}
       {saveStatus && (
         <div className={`p-4 rounded-lg flex items-center gap-3 ${
           saveStatus === 'saving' ? 'bg-cyber-accent/20 border border-cyber-accent/50' :
@@ -241,7 +301,7 @@ export default function Settings() {
         </div>
       )}
 
-      {/* System Info Card */}
+      {/* System Information Card */}
       <div className="cyber-card">
         <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
           <Server className="w-5 h-5 text-cyber-accent" />
@@ -300,7 +360,7 @@ export default function Settings() {
         )}
       </div>
 
-      {/* Update Card */}
+      {/* Updates Card */}
       <div className="cyber-card">
         <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
           <GitBranch className="w-5 h-5 text-cyber-accent" />
@@ -362,11 +422,15 @@ export default function Settings() {
 
         <div className="space-y-6">
           {/* Plex */}
-          <div className="p-4 bg-cyber-darker rounded-lg">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-medium text-cyber-accent">Plex Media Server</h3>
-              <TestButton service="plex" disabled={!settings.plex?.url || !settings.plex?.token} />
-            </div>
+          <ServiceSection
+            title="Plex Media Server"
+            service="plex"
+            settings={settings}
+            updateSetting={updateSetting}
+            testing={testing}
+            testResult={testResults}
+            onTest={testConnection}
+          >
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm text-gray-400 mb-1">Server URL</label>
@@ -389,15 +453,18 @@ export default function Settings() {
                 />
               </div>
             </div>
-            <StatusBadge service="plex" />
-          </div>
+          </ServiceSection>
 
           {/* Radarr */}
-          <div className="p-4 bg-cyber-darker rounded-lg">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-medium text-cyber-accent">Radarr (Movies)</h3>
-              <TestButton service="radarr" disabled={!settings.radarr?.url || !settings.radarr?.api_key} />
-            </div>
+          <ServiceSection
+            title="Radarr (Movies)"
+            service="radarr"
+            settings={settings}
+            updateSetting={updateSetting}
+            testing={testing}
+            testResult={testResults}
+            onTest={testConnection}
+          >
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm text-gray-400 mb-1">URL</label>
@@ -420,15 +487,18 @@ export default function Settings() {
                 />
               </div>
             </div>
-            <StatusBadge service="radarr" />
-          </div>
+          </ServiceSection>
 
           {/* Sonarr */}
-          <div className="p-4 bg-cyber-darker rounded-lg">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-medium text-cyber-accent">Sonarr (TV Shows)</h3>
-              <TestButton service="sonarr" disabled={!settings.sonarr?.url || !settings.sonarr?.api_key} />
-            </div>
+          <ServiceSection
+            title="Sonarr (TV Shows)"
+            service="sonarr"
+            settings={settings}
+            updateSetting={updateSetting}
+            testing={testing}
+            testResult={testResults}
+            onTest={testConnection}
+          >
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm text-gray-400 mb-1">URL</label>
@@ -451,15 +521,18 @@ export default function Settings() {
                 />
               </div>
             </div>
-            <StatusBadge service="sonarr" />
-          </div>
+          </ServiceSection>
 
           {/* Bazarr */}
-          <div className="p-4 bg-cyber-darker rounded-lg">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-medium text-cyber-accent">Bazarr (Subtitles)</h3>
-              <TestButton service="bazarr" disabled={!settings.bazarr?.url || !settings.bazarr?.api_key} />
-            </div>
+          <ServiceSection
+            title="Bazarr (Subtitles)"
+            service="bazarr"
+            settings={settings}
+            updateSetting={updateSetting}
+            testing={testing}
+            testResult={testResults}
+            onTest={testConnection}
+          >
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm text-gray-400 mb-1">URL</label>
@@ -482,8 +555,7 @@ export default function Settings() {
                 />
               </div>
             </div>
-            <StatusBadge service="bazarr" />
-          </div>
+          </ServiceSection>
         </div>
       </div>
 
@@ -563,7 +635,13 @@ export default function Settings() {
                   This is different from the built-in embedded AI.
                 </p>
               </div>
-              <TestButton service="ollama" disabled={!settings.ai?.ollama_url} />
+              <TestButton
+                service="ollama"
+                disabled={!settings.ai?.ollama_url}
+                testing={testing}
+                testResult={testResults}
+                onTest={testConnection}
+              />
             </div>
             <div>
               <label className="block text-sm text-gray-400 mb-1">Ollama Server URL</label>
@@ -578,12 +656,12 @@ export default function Settings() {
                 Leave empty to use only embedded AI and cloud providers
               </p>
             </div>
-            <StatusBadge service="ollama" />
+            <StatusBadge service="ollama" testResult={testResults} />
           </div>
         </div>
       </div>
 
-      {/* Save Button - Sticky */}
+      {/* Save Button - Sticky at bottom */}
       <div className="sticky bottom-4 flex justify-end">
         <button
           onClick={saveSettings}

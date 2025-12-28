@@ -29,11 +29,20 @@ const navItems = [
 export default function Layout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [chatOpen, setChatOpen] = useState(false)
+  const [version, setVersion] = useState(null) // Fetched from API - single source of truth
   const [glitchEnabled, setGlitchEnabled] = useState(() => {
     // Load from localStorage
     const saved = localStorage.getItem('butlarr-glitch')
     return saved === 'true'
   })
+
+  // Fetch version from API on mount - ensures frontend always shows correct version
+  useEffect(() => {
+    fetch('/api/system/info')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => data && setVersion(data.version))
+      .catch(() => {}) // Silently fail - version display is non-critical
+  }, [])
 
   // Apply glitch class to body
   useEffect(() => {
@@ -90,10 +99,10 @@ export default function Layout({ children }) {
           ))}
         </nav>
 
-        {/* Version */}
-        {sidebarOpen && (
+        {/* Version - fetched from API for consistency */}
+        {sidebarOpen && version && (
           <div className="absolute bottom-4 left-4 right-4 text-center">
-            <span className="text-sm text-cyber-accent/70 font-mono cyber-glow">v2512.2.0</span>
+            <span className="text-sm text-cyber-accent/70 font-mono cyber-glow">v{version}</span>
           </div>
         )}
       </aside>
@@ -106,7 +115,7 @@ export default function Layout({ children }) {
             <h1 className="text-xl font-semibold">AI-Powered Plex Library Management</h1>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-500 font-mono">v2512.2.0</span>
+            {version && <span className="text-sm text-gray-500 font-mono">v{version}</span>}
             {/* Glitch toggle */}
             <button
               onClick={() => setGlitchEnabled(!glitchEnabled)}

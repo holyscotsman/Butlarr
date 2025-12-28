@@ -13,6 +13,8 @@ from functools import lru_cache
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings
 
+from backend.utils.version import VERSION
+
 
 class PlexConfig(BaseModel):
     """Plex server configuration."""
@@ -173,7 +175,7 @@ class BadMovieCriteria(BaseModel):
 class Settings(BaseSettings):
     """Main application settings from environment."""
     app_name: str = "Butlarr"
-    app_version: str = "2512.2.0"
+    app_version: str = VERSION  # Read from centralized VERSION file
     app_env: str = "production"
     debug: bool = False
     

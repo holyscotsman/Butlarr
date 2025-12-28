@@ -14,6 +14,7 @@ from backend.db.models import (
     Recommendation, BadMovieSuggestion, MediaType
 )
 from backend.utils.config import get_config
+from backend.utils.version import VERSION
 
 router = APIRouter()
 
@@ -158,7 +159,7 @@ async def generate_full_report(db: AsyncSession = Depends(get_db)):
     
     return LibraryReport(
         generated_at=datetime.utcnow(),
-        server_version="2512.0.3",
+        server_version=VERSION,
         
         total_movies=total_movies,
         total_tv_shows=total_tv_shows,

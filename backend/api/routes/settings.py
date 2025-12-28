@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from backend.utils.config import get_config, update_config, AppConfig
+from backend.utils.constants import API
 
 router = APIRouter()
 
@@ -57,44 +58,64 @@ class BadMovieCriteriaUpdate(BaseModel):
     protect_watched_recently_days: Optional[int] = None
 
 
+def _mask_sensitive(value: str) -> str:
+    """Mask a sensitive value if it exists, otherwise return empty string."""
+    return API.MASK_VALUE if value else ""
+
+
 @router.get("")
 async def get_settings():
-    """Get all settings (with sensitive data masked)."""
+    """
+    Get all settings with sensitive data masked.
+
+    Sensitive fields (tokens, API keys, passwords) are replaced with '***'
+    to prevent exposure. When saving, any field that is still '***' will
+    be skipped to preserve the original value.
+    """
     config = get_config()
-    
+
     return {
         "plex": {
             "url": config.plex.url,
-            "token": "***" if config.plex.token else "",
+            "token": _mask_sensitive(config.plex.token),
             "is_configured": config.plex.is_configured,
         },
         "radarr": {
             "url": config.radarr.url,
-            "api_key": "***" if config.radarr.api_key else "",
+            "api_key": _mask_sensitive(config.radarr.api_key),
             "is_configured": config.radarr.is_configured,
         },
         "sonarr": {
             "url": config.sonarr.url,
-            "api_key": "***" if config.sonarr.api_key else "",
+            "api_key": _mask_sensitive(config.sonarr.api_key),
             "is_configured": config.sonarr.is_configured,
+        },
+        # Bazarr was missing from the response - added for completeness
+        "bazarr": {
+            "url": config.bazarr.url,
+            "api_key": _mask_sensitive(config.bazarr.api_key),
+            "is_configured": config.bazarr.is_configured,
         },
         "overseerr": {
             "url": config.overseerr.url,
-            "api_key": "***" if config.overseerr.api_key else "",
+            "api_key": _mask_sensitive(config.overseerr.api_key),
             "is_configured": config.overseerr.is_configured,
         },
         "tautulli": {
             "url": config.tautulli.url,
-            "api_key": "***" if config.tautulli.api_key else "",
+            "api_key": _mask_sensitive(config.tautulli.api_key),
             "is_configured": config.tautulli.is_configured,
         },
         "filebot": {
             "url": config.filebot.url,
             "username": config.filebot.username,
+            "password": _mask_sensitive(config.filebot.password),
             "is_configured": config.filebot.is_configured,
         },
         "ai": {
             "enabled": config.ai.enabled,
+            "anthropic_api_key": _mask_sensitive(config.ai.anthropic_api_key),
+            "openai_api_key": _mask_sensitive(config.ai.openai_api_key),
             "has_anthropic": config.ai.has_anthropic,
             "has_openai": config.ai.has_openai,
             "ollama_url": config.ai.ollama_url,
@@ -128,6 +149,69 @@ async def get_settings():
         },
         "media_paths": config.media_paths.model_dump(),
     }
+
+
+@router.put("")
+async def update_all_settings(settings_data: Dict[str, Any]):
+    """
+    Bulk update all settings at once.
+
+    This endpoint handles the full settings object from the frontend.
+    Sensitive fields that are still masked (***) will be skipped to
+    preserve their original values - this prevents the mask from being
+    saved as the actual credential.
+
+    Args:
+        settings_data: Dictionary containing all settings sections
+
+    Returns:
+        Success status and message
+    """
+    updates = {}
+
+    # Process each section, filtering out masked sensitive values
+    # This mapping defines which fields in each section are sensitive
+    sensitive_fields = {
+        "plex": ["token"],
+        "radarr": ["api_key"],
+        "sonarr": ["api_key"],
+        "bazarr": ["api_key"],
+        "overseerr": ["api_key"],
+        "tautulli": ["api_key"],
+        "filebot": ["password"],
+        "ai": ["anthropic_api_key", "openai_api_key"],
+    }
+
+    for section, data in settings_data.items():
+        if not isinstance(data, dict):
+            continue
+
+        # Skip read-only computed fields
+        if section in ["is_configured", "has_anthropic", "has_openai"]:
+            continue
+
+        section_updates = {}
+        section_sensitive = sensitive_fields.get(section, [])
+
+        for key, value in data.items():
+            # Skip read-only computed fields
+            if key in ["is_configured", "has_anthropic", "has_openai"]:
+                continue
+
+            # For sensitive fields, skip if value is the mask placeholder
+            if key in section_sensitive:
+                if value == API.MASK_VALUE:
+                    continue  # Don't overwrite with mask
+
+            section_updates[key] = value
+
+        if section_updates:
+            updates[section] = section_updates
+
+    if updates:
+        update_config(updates)
+
+    return {"status": "success", "message": "All settings updated successfully"}
 
 
 @router.put("/plex")

@@ -15,6 +15,7 @@ from backend.utils.config import get_config
 from backend.utils.logging import setup_logging
 from backend.core.websocket_manager import WebSocketManager
 from backend.core.scanner.manager import ScanManager
+from backend.utils.version import VERSION
 
 # Import routes
 from backend.api.routes import (
@@ -42,7 +43,7 @@ logger = structlog.get_logger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
-    logger.info("Starting Butlarr", version="2512.1.0")
+    logger.info("Starting Butlarr", version=VERSION)
     
     # Initialize database
     await init_db()
@@ -70,7 +71,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Butlarr",
     description="AI-Powered Plex Library Manager",
-    version="2512.1.0",
+    version=VERSION,
     lifespan=lifespan,
 )
 
@@ -114,7 +115,7 @@ async def root_health_check():
     from datetime import datetime
     return {
         "status": "healthy",
-        "version": "2512.1.0",
+        "version": VERSION,
         "timestamp": datetime.utcnow().isoformat(),
     }
 
@@ -142,7 +143,7 @@ else:
     async def root():
         return {
             "message": "Butlarr API",
-            "version": "2512.1.0",
+            "version": VERSION,
             "docs": "/docs",
             "note": "Frontend not built. Run: cd frontend && npm install && npm run build"
         }

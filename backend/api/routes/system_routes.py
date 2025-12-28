@@ -10,13 +10,12 @@ from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 import structlog
 
+from backend.utils.version import VERSION, BUILD_DATE
+from backend.utils.constants import TIMEOUTS, PATHS
+
 logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/system", tags=["system"])
-
-# Version info
-VERSION = "2512.1.0"
-BUILD_DATE = "2024-12-27"
 
 
 class UpdateStatus(BaseModel):
@@ -91,9 +90,9 @@ async def get_system_info():
     if config.ai.ollama_url:
         ai_providers.append("ollama")
     
-    # Check embedded AI
-    embedded_model_path = "/app/data/models/qwen2.5-1.5b-instruct.Q4_K_M.gguf"
-    embedded_available = os.path.exists(embedded_model_path)
+    # Check embedded AI - using centralized path constant
+    embedded_model_path = PATHS.embedded_model_path()
+    embedded_available = embedded_model_path.exists()
     if embedded_available:
         ai_providers.append("embedded")
     
@@ -124,7 +123,7 @@ async def check_for_updates():
         )
 
     # Check if .git directory exists (Docker images may not include it)
-    git_dir = Path("/app/.git")
+    git_dir = PATHS.git_dir()
     if not git_dir.exists():
         # No git directory - suggest using Docker image updates instead
         _update_state["last_check"] = datetime.utcnow().isoformat()
@@ -140,16 +139,17 @@ async def check_for_updates():
         # Fetch latest from remote
         result = subprocess.run(
             ["git", "fetch", "origin"],
-            cwd="/app",
+            cwd=str(PATHS.APP_ROOT),
             capture_output=True,
-            timeout=30,
+            timeout=TIMEOUTS.GIT_FETCH,
         )
 
         # Get current branch
+        app_root = str(PATHS.APP_ROOT)
         try:
             branch = subprocess.check_output(
                 ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-                cwd="/app",
+                cwd=app_root,
                 stderr=subprocess.DEVNULL,
             ).decode().strip()
         except:
@@ -158,19 +158,19 @@ async def check_for_updates():
         # Get local and remote commits
         local = subprocess.check_output(
             ["git", "rev-parse", "HEAD"],
-            cwd="/app"
+            cwd=app_root
         ).decode().strip()
 
         try:
             remote = subprocess.check_output(
                 ["git", "rev-parse", f"origin/{branch}"],
-                cwd="/app"
+                cwd=app_root
             ).decode().strip()
         except:
             # Fallback to origin/main
             remote = subprocess.check_output(
                 ["git", "rev-parse", "origin/main"],
-                cwd="/app"
+                cwd=app_root
             ).decode().strip()
 
         _update_state["last_check"] = datetime.utcnow().isoformat()
@@ -211,21 +211,22 @@ async def _perform_update():
         logger.info("Starting update process")
         
         # Pull latest code
+        app_root = str(PATHS.APP_ROOT)
         subprocess.run(
             ["git", "pull", "origin", "main"],
-            cwd="/app",
+            cwd=app_root,
             check=True,
             capture_output=True,
-            timeout=120,
+            timeout=TIMEOUTS.GIT_PULL,
         )
-        
+
         # Install any new Python dependencies
         subprocess.run(
             ["pip", "install", "-r", "requirements.txt", "--quiet", "--break-system-packages"],
-            cwd="/app",
+            cwd=app_root,
             check=True,
             capture_output=True,
-            timeout=300,
+            timeout=TIMEOUTS.PIP_INSTALL,
         )
         
         logger.info("Update completed successfully")
@@ -263,7 +264,7 @@ async def apply_update(background_tasks: BackgroundTasks):
 @router.get("/logs")
 async def get_logs(lines: int = 100):
     """Get recent application logs."""
-    log_file = Path("/app/data/logs/butlarr.log")
+    log_file = PATHS.log_file()
     
     if not log_file.exists():
         return {"logs": [], "message": "No log file found"}
@@ -281,8 +282,8 @@ async def get_logs(lines: int = 100):
 async def download_logs():
     """Download full log file."""
     from fastapi.responses import FileResponse
-    
-    log_file = Path("/app/data/logs/butlarr.log")
+
+    log_file = PATHS.log_file()
     
     if not log_file.exists():
         raise HTTPException(status_code=404, detail="Log file not found")
@@ -298,7 +299,8 @@ async def download_logs():
 async def request_restart():
     """Request application restart (container must support this)."""
     # This creates a file that the entrypoint can watch for
-    restart_file = Path("/app/data/.restart_requested")
+    restart_file = PATHS.restart_file()
+    restart_file.parent.mkdir(parents=True, exist_ok=True)
     restart_file.touch()
     
     return {
