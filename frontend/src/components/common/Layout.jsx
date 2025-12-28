@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import AIChat from './AIChat'
+import ButlarrLogo from './ButlarrLogo'
 
 const navItems = [
   { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
@@ -53,13 +54,13 @@ export default function Layout({ children }) {
       <aside className={`fixed left-0 top-0 h-full bg-cyber-panel border-r border-cyber-border z-40 transition-all duration-300 ${sidebarOpen ? 'w-64' : 'w-16'}`}>
         {/* Logo */}
         <div className="h-16 flex items-center justify-between px-4 border-b border-cyber-border">
-          {sidebarOpen && (
+          {sidebarOpen ? (
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-cyber-accent rounded-lg flex items-center justify-center pulse-glow">
-                <span className="text-cyber-dark font-bold text-lg">B</span>
-              </div>
+              <ButlarrLogo size={36} animated={glitchEnabled} />
               <span className={`font-bold text-xl text-cyber-accent ${glitchEnabled ? 'glitch-text logo-glitch' : ''}`} data-text="Butlarr">Butlarr</span>
             </div>
+          ) : (
+            <ButlarrLogo size={32} animated={glitchEnabled} />
           )}
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
