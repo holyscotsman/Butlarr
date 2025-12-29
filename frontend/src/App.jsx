@@ -9,6 +9,7 @@ import Issues from './pages/Issues'
 import Storage from './pages/Storage'
 import Activity from './pages/Activity'
 import Settings from './pages/Settings'
+import Logs from './pages/Logs'
 import { api } from './services/api'
 
 function App() {
@@ -57,6 +58,7 @@ function App() {
         <Route path="/storage" element={<Storage />} />
         <Route path="/activity" element={<Activity />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/logs" element={<Logs />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>

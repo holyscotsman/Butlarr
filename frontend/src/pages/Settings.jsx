@@ -120,10 +120,23 @@ export default function Settings() {
   const [testResults, setTestResults] = useState({});
   const [testing, setTesting] = useState({});
 
+  // Embedded AI state
+  const [embeddedAI, setEmbeddedAI] = useState(null);
+  const [downloadingModel, setDownloadingModel] = useState(false);
+
   // Fetch initial data on mount
   useEffect(() => {
     fetchData();
+    fetchEmbeddedAIStatus();
   }, []);
+
+  // Poll for download progress when downloading
+  useEffect(() => {
+    if (downloadingModel) {
+      const interval = setInterval(fetchEmbeddedAIStatus, 2000);
+      return () => clearInterval(interval);
+    }
+  }, [downloadingModel]);
 
   /**
    * Fetch system info and settings from API
@@ -142,6 +155,56 @@ export default function Settings() {
       console.error('Failed to fetch data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  /**
+   * Fetch embedded AI model status
+   */
+  const fetchEmbeddedAIStatus = async () => {
+    try {
+      const data = await api.get('/api/embedded-ai/status');
+      setEmbeddedAI(data);
+      // Update downloading state based on response
+      if (data.download_in_progress) {
+        setDownloadingModel(true);
+      } else if (downloadingModel && data.installed) {
+        setDownloadingModel(false);
+      } else if (downloadingModel && data.download_error) {
+        setDownloadingModel(false);
+      }
+    } catch (error) {
+      console.error('Failed to fetch embedded AI status:', error);
+    }
+  };
+
+  /**
+   * Start downloading the embedded AI model
+   */
+  const downloadEmbeddedModel = async () => {
+    try {
+      setDownloadingModel(true);
+      await api.post('/api/embedded-ai/download/start');
+    } catch (error) {
+      console.error('Failed to start model download:', error);
+      alert('Failed to start download: ' + error.message);
+      setDownloadingModel(false);
+    }
+  };
+
+  /**
+   * Delete the embedded AI model
+   */
+  const deleteEmbeddedModel = async () => {
+    if (!confirm('Delete the embedded AI model? You can re-download it later.')) {
+      return;
+    }
+    try {
+      await api.delete('/api/embedded-ai/model');
+      fetchEmbeddedAIStatus();
+    } catch (error) {
+      console.error('Failed to delete model:', error);
+      alert('Failed to delete model: ' + error.message);
     }
   };
 
@@ -567,23 +630,76 @@ export default function Settings() {
         </h2>
 
         <div className="space-y-6">
-          {/* Embedded AI Info */}
-          <div className="p-4 bg-cyber-green/10 border border-cyber-green/30 rounded-lg">
-            <div className="flex items-start gap-3">
-              <Bot className="w-5 h-5 text-cyber-green mt-0.5" />
-              <div>
-                <h4 className="font-medium text-cyber-green">Embedded AI (Free)</h4>
-                <p className="text-sm text-gray-400 mt-1">
-                  Butlarr includes a built-in AI model (Qwen 2.5 1.5B) that runs locally.
-                  It's slower than cloud APIs but completely free and private.
-                  {systemInfo?.embedded_ai_available ? (
-                    <span className="text-cyber-green"> ✓ Model loaded and ready</span>
-                  ) : (
-                    <span className="text-cyber-yellow"> Downloading model on first use...</span>
+          {/* Embedded AI Management */}
+          <div className={`p-4 border rounded-lg ${embeddedAI?.installed ? 'bg-cyber-green/10 border-cyber-green/30' : 'bg-cyber-darker border-cyber-border'}`}>
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <Bot className={`w-5 h-5 mt-0.5 ${embeddedAI?.installed ? 'text-cyber-green' : 'text-gray-400'}`} />
+                <div>
+                  <h4 className={`font-medium ${embeddedAI?.installed ? 'text-cyber-green' : 'text-gray-300'}`}>
+                    Embedded AI (Free & Private)
+                  </h4>
+                  <p className="text-sm text-gray-400 mt-1">
+                    {embeddedAI?.model_name || 'Qwen 2.5 1.5B'} - runs locally without sending data to external servers.
+                    {embeddedAI?.installed && <span className="text-cyber-green"> ✓ Installed and ready</span>}
+                  </p>
+                  {embeddedAI && !embeddedAI.installed && !embeddedAI.download_in_progress && (
+                    <p className="text-sm text-cyber-yellow mt-1">
+                      Model not installed. Download it to enable free AI features (~1.1 GB).
+                    </p>
                   )}
-                </p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                {embeddedAI?.installed ? (
+                  <button
+                    onClick={deleteEmbeddedModel}
+                    className="px-3 py-2 bg-cyber-red/10 hover:bg-cyber-red/20 border border-cyber-red/50 rounded-lg text-cyber-red text-sm"
+                  >
+                    Delete Model
+                  </button>
+                ) : embeddedAI?.download_in_progress ? (
+                  <button disabled className="px-3 py-2 bg-cyber-accent/10 border border-cyber-accent/50 rounded-lg text-cyber-accent text-sm flex items-center gap-2">
+                    <Loader2 size={16} className="animate-spin" />
+                    Downloading...
+                  </button>
+                ) : (
+                  <button
+                    onClick={downloadEmbeddedModel}
+                    className="px-3 py-2 bg-cyber-green/10 hover:bg-cyber-green/20 border border-cyber-green/50 rounded-lg text-cyber-green text-sm flex items-center gap-2"
+                  >
+                    <Download size={16} />
+                    Download Model
+                  </button>
+                )}
               </div>
             </div>
+
+            {/* Download Progress */}
+            {embeddedAI?.download_in_progress && (
+              <div className="mt-4">
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="text-gray-400">{embeddedAI.status === 'downloading' ? 'Downloading...' : embeddedAI.status}</span>
+                  <span className="text-cyber-accent">{embeddedAI.download_progress_percent?.toFixed(1)}%</span>
+                </div>
+                <div className="w-full h-2 bg-cyber-darker rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-cyber-accent transition-all duration-300"
+                    style={{ width: `${embeddedAI.download_progress_percent || 0}%` }}
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  This may take several minutes depending on your connection speed.
+                </p>
+              </div>
+            )}
+
+            {/* Download Error */}
+            {embeddedAI?.download_error && (
+              <div className="mt-3 p-2 bg-cyber-red/10 border border-cyber-red/30 rounded text-sm text-cyber-red">
+                Download failed: {embeddedAI.download_error}
+              </div>
+            )}
           </div>
 
           {/* Cloud AI APIs */}

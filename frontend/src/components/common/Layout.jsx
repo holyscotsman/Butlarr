@@ -10,7 +10,8 @@ import {
   MessageSquare,
   Menu,
   X,
-  Zap
+  Zap,
+  FileText
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import AIChat from './AIChat'
@@ -24,6 +25,7 @@ const navItems = [
   { path: '/storage', icon: HardDrive, label: 'Storage' },
   { path: '/activity', icon: Activity, label: 'Activity' },
   { path: '/settings', icon: Settings, label: 'Settings' },
+  { path: '/logs', icon: FileText, label: 'Logs' },
 ]
 
 export default function Layout({ children }) {

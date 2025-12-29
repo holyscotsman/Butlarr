@@ -33,6 +33,7 @@ from backend.api.routes import (
     system_routes,
     ai_chat,
     storage,
+    embedded_ai,
 )
 
 # Setup logging first
@@ -105,6 +106,7 @@ app.include_router(report.router, prefix="/api")
 app.include_router(ai_chat.router, prefix="/api")
 app.include_router(system_routes.router, prefix="/api")
 app.include_router(storage.router, prefix="/api/storage")
+app.include_router(embedded_ai.router, prefix="/api")
 app.include_router(websocket_routes.router, prefix="/ws")
 
 
