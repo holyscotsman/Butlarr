@@ -39,7 +39,7 @@ export default function SetupWizard({ onComplete }) {
   const [overseerr, setOverseerr] = useState({ url: '', api_key: '' })
   const [tautulli, setTautulli] = useState({ url: '', api_key: '' })
   const [filebot, setFilebot] = useState({ url: '', username: '', password: '' })
-  const [ai, setAi] = useState({ anthropic_api_key: '', openai_api_key: '', ollama_url: '' })
+  const [ai, setAi] = useState({ anthropic_api_key: '', openai_api_key: '' })
 
   const testAndConfigure = async (service, endpoint, data) => {
     setTesting(true)
@@ -266,7 +266,7 @@ export default function SetupWizard({ onComplete }) {
 
             <div className="cyber-card">
               <h3 className="font-semibold mb-4">Anthropic (Recommended)</h3>
-              <input 
+              <input
                 type="password"
                 placeholder="sk-ant-api..."
                 value={ai.anthropic_api_key}
@@ -278,7 +278,7 @@ export default function SetupWizard({ onComplete }) {
 
             <div className="cyber-card">
               <h3 className="font-semibold mb-4">OpenAI (Alternative)</h3>
-              <input 
+              <input
                 type="password"
                 placeholder="sk-..."
                 value={ai.openai_api_key}
@@ -288,16 +288,14 @@ export default function SetupWizard({ onComplete }) {
               <p className="text-xs text-gray-500 mt-2">Powers GPT-5 Mini for budget-friendly curation.</p>
             </div>
 
-            <div className="cyber-card">
-              <h3 className="font-semibold mb-4">Ollama (Free, Local)</h3>
-              <input 
-                type="text"
-                placeholder="http://host.docker.internal:11434"
-                value={ai.ollama_url}
-                onChange={(e) => setAi(prev => ({ ...prev, ollama_url: e.target.value }))}
-                className="cyber-input"
-              />
-              <p className="text-xs text-gray-500 mt-2">Run AI models locally for free assistant chat.</p>
+            <div className="p-4 border border-cyber-accent/30 bg-cyber-accent/5 rounded-xl">
+              <div className="flex items-center gap-3">
+                <Sparkles className="text-cyber-accent" size={20} />
+                <div>
+                  <p className="text-cyber-accent font-medium">Free Local AI Available</p>
+                  <p className="text-sm text-gray-400">You can download a free embedded AI model in Settings after setup.</p>
+                </div>
+              </div>
             </div>
 
             <button

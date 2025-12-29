@@ -15,7 +15,7 @@ class HealthResponse(BaseModel):
     setup_complete: bool
 
 
-@router.get("/health", response_model=HealthResponse)
+@router.get("", response_model=HealthResponse)
 async def health_check():
     """Check application health status."""
     settings = get_settings()

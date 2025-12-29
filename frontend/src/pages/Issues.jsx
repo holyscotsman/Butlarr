@@ -33,11 +33,13 @@ export default function Issues() {
       if (filterSeverity) params.append('severity', filterSeverity)
       if (filterType) params.append('issue_type', filterType)
       if (params.toString()) endpoint += `?${params.toString()}`
-      
+
       const response = await api.get(endpoint)
-      setIssues(response.data.issues)
+      // api.get returns data directly, not wrapped in .data
+      setIssues(response?.issues || [])
     } catch (error) {
       console.error('Failed to fetch issues:', error)
+      setIssues([])
     } finally {
       setLoading(false)
     }
@@ -46,7 +48,8 @@ export default function Issues() {
   const fetchStats = async () => {
     try {
       const response = await api.get('/api/issues/stats')
-      setStats(response.data)
+      // api.get returns data directly
+      setStats(response)
     } catch (error) {
       console.error('Failed to fetch stats:', error)
     }
@@ -55,7 +58,8 @@ export default function Issues() {
   const fetchIssueTypes = async () => {
     try {
       const response = await api.get('/api/issues/types')
-      setIssueTypes(response.data.types)
+      // api.get returns data directly
+      setIssueTypes(response?.types || [])
     } catch (error) {
       console.error('Failed to fetch issue types:', error)
     }
