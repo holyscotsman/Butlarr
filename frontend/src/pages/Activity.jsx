@@ -36,11 +36,13 @@ export default function Activity() {
     try {
       let endpoint = `/api/activity?days=${filterDays}&limit=100`
       if (filterType) endpoint += `&action_type=${filterType}`
-      
+
       const response = await api.get(endpoint)
-      setActivities(response.data.activities)
+      // api.get returns data directly, not wrapped in .data
+      setActivities(response?.activities || response || [])
     } catch (error) {
       console.error('Failed to fetch activity:', error)
+      setActivities([])
     } finally {
       setLoading(false)
     }
@@ -49,9 +51,11 @@ export default function Activity() {
   const fetchActionTypes = async () => {
     try {
       const response = await api.get('/api/activity/types')
-      setActionTypes(response.data.types)
+      // api.get returns data directly, not wrapped in .data
+      setActionTypes(response?.types || response || [])
     } catch (error) {
       console.error('Failed to fetch action types:', error)
+      setActionTypes([])
     }
   }
 

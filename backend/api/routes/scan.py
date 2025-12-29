@@ -3,13 +3,14 @@
 from typing import Optional, List
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.database import get_db
 from backend.db.models import Scan, ScanStatus
 from backend.utils.config import get_config
+from backend.utils.constants import SCAN
 
 router = APIRouter()
 
@@ -18,6 +19,24 @@ class ScanStartRequest(BaseModel):
     """Request to start a new scan."""
     phases: Optional[List[int]] = None  # Specific phases to run, None = all
     skip_ai_curator: bool = False
+
+    @field_validator('phases')
+    @classmethod
+    def validate_phases(cls, v: Optional[List[int]]) -> Optional[List[int]]:
+        """Validate and normalize phase numbers (1-17)."""
+        if v is None:
+            return v
+
+        if not v:
+            raise ValueError("phases list cannot be empty if provided")
+
+        # Check for invalid phase numbers
+        invalid = [p for p in v if p not in SCAN.VALID_PHASES]
+        if invalid:
+            raise ValueError(f"Invalid phase number(s): {invalid}. Valid phases are 1-17.")
+
+        # Deduplicate and sort in one step
+        return sorted(set(v))
 
 
 class ScanProgressResponse(BaseModel):

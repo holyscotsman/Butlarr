@@ -15,9 +15,12 @@ REPO_URL=${BUTLARR_REPO:-""}
 AUTO_UPDATE=${AUTO_UPDATE:-"true"}
 BRANCH=${BRANCH:-"main"}
 
+# Read version from VERSION file
+APP_VERSION=$(cat /app/VERSION 2>/dev/null || echo "2512.1.2")
+
 echo "
 ╔══════════════════════════════════════════════════════════════╗
-║                    BUTLARR v2512.1.0                         ║
+║                    BUTLARR v${APP_VERSION}                          ║
 ║            AI-Powered Plex Library Manager                   ║
 ╚══════════════════════════════════════════════════════════════╝
 "
@@ -27,27 +30,35 @@ echo "
 # -----------------------------------------------------------------------------
 echo "► Setting up permissions (PUID=$PUID, PGID=$PGID)..."
 
-# Create group if it doesn't exist
-if ! getent group butlarr > /dev/null 2>&1; then
-    groupadd -g "$PGID" butlarr
+# Get the group name for the specified GID (might already exist, e.g., 'users' on Unraid)
+EXISTING_GROUP=$(getent group "$PGID" | cut -d: -f1)
+
+if [ -n "$EXISTING_GROUP" ]; then
+    # GID already exists - use that group
+    GROUP_NAME="$EXISTING_GROUP"
+    echo "  Using existing group: $GROUP_NAME (GID $PGID)"
+else
+    # Create new group with specified GID
+    GROUP_NAME="butlarr"
+    groupadd -g "$PGID" "$GROUP_NAME" 2>/dev/null || true
+    echo "  Created group: $GROUP_NAME (GID $PGID)"
 fi
 
 # Create user if it doesn't exist
 if ! getent passwd butlarr > /dev/null 2>&1; then
-    useradd -u "$PUID" -g "$PGID" -d "$APP_DIR" -s /bin/bash butlarr
+    useradd -u "$PUID" -g "$PGID" -d "$APP_DIR" -s /bin/bash butlarr 2>/dev/null || true
 else
     # Update existing user's UID/GID
-    usermod -u "$PUID" butlarr 2>/dev/null || true
-    groupmod -g "$PGID" butlarr 2>/dev/null || true
+    usermod -u "$PUID" -g "$PGID" butlarr 2>/dev/null || true
 fi
 
 # Ensure directories exist
 mkdir -p "$DATA_DIR" "$MODELS_DIR" "$DATA_DIR/logs" "$DATA_DIR/reports"
 
-# Set ownership
-chown -R butlarr:butlarr "$DATA_DIR"
-chown -R butlarr:butlarr "$APP_DIR/backend" 2>/dev/null || true
-chown -R butlarr:butlarr "$APP_DIR/frontend" 2>/dev/null || true
+# Set ownership using the correct group name (might be 'users' on Unraid, not 'butlarr')
+chown -R butlarr:"$GROUP_NAME" "$DATA_DIR"
+chown -R butlarr:"$GROUP_NAME" "$APP_DIR/backend" 2>/dev/null || true
+chown -R butlarr:"$GROUP_NAME" "$APP_DIR/frontend" 2>/dev/null || true
 
 echo "  ✓ Permissions configured"
 
@@ -140,7 +151,7 @@ if [ "$EMBEDDED_AI" = "true" ] && [ ! -f "$MODEL_FILE" ]; then
     fi
     
     if [ -f "$MODEL_FILE" ]; then
-        chown butlarr:butlarr "$MODEL_FILE"
+        chown butlarr:"$GROUP_NAME" "$MODEL_FILE"
         echo "  ✓ Model downloaded successfully"
     fi
 elif [ "$EMBEDDED_AI" = "true" ] && [ -f "$MODEL_FILE" ]; then
@@ -151,12 +162,37 @@ fi
 # Step 4: Run database migrations
 # -----------------------------------------------------------------------------
 echo "► Checking database..."
-cd "$APP_DIR"
 
-# Run migrations if alembic is configured
-if [ -f "alembic.ini" ]; then
+# Run migrations if alembic is configured (alembic.ini is in backend/)
+if [ -f "$APP_DIR/backend/alembic.ini" ]; then
     echo "  Running database migrations..."
-    gosu butlarr alembic upgrade head 2>/dev/null || echo "  ✓ Database ready (no migrations needed)"
+    cd "$APP_DIR/backend"
+
+    # Check if this is a fresh database (no alembic_version table)
+    # If so, stamp it as current since tables were created by SQLAlchemy
+    if ! gosu butlarr python -c "
+from backend.db.database import get_db_path
+import sqlite3
+db_path = get_db_path()
+if db_path.exists():
+    conn = sqlite3.connect(str(db_path))
+    cursor = conn.execute(\"SELECT name FROM sqlite_master WHERE type='table' AND name='alembic_version'\")
+    has_alembic = cursor.fetchone() is not None
+    conn.close()
+    exit(0 if has_alembic else 1)
+else:
+    exit(1)
+" 2>/dev/null; then
+        # Database exists but no alembic_version table - stamp current version
+        if [ -f "$DATA_DIR/butlarr.db" ]; then
+            echo "  Stamping existing database with current migration..."
+            gosu butlarr alembic stamp head 2>/dev/null || true
+        fi
+    fi
+
+    # Run any pending migrations
+    gosu butlarr alembic upgrade head 2>/dev/null && echo "  ✓ Database migrations complete" || echo "  ✓ Database ready"
+    cd "$APP_DIR"
 else
     echo "  ✓ Database will be initialized on first run"
 fi

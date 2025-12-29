@@ -13,6 +13,8 @@ from functools import lru_cache
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings
 
+from backend.utils.version import VERSION
+
 
 class PlexConfig(BaseModel):
     """Plex server configuration."""
@@ -44,11 +46,21 @@ class SonarrConfig(BaseModel):
         return bool(self.url and self.api_key)
 
 
+class BazarrConfig(BaseModel):
+    """Bazarr configuration."""
+    url: str = ""
+    api_key: str = ""
+
+    @property
+    def is_configured(self) -> bool:
+        return bool(self.url and self.api_key)
+
+
 class OverseerrConfig(BaseModel):
     """Overseerr configuration."""
     url: str = ""
     api_key: str = ""
-    
+
     @property
     def is_configured(self) -> bool:
         return bool(self.url and self.api_key)
@@ -163,7 +175,7 @@ class BadMovieCriteria(BaseModel):
 class Settings(BaseSettings):
     """Main application settings from environment."""
     app_name: str = "Butlarr"
-    app_version: str = "2512.0.3"
+    app_version: str = VERSION  # Read from centralized VERSION file
     app_env: str = "production"
     debug: bool = False
     
@@ -180,6 +192,8 @@ class Settings(BaseSettings):
     radarr_api_key: str = ""
     sonarr_url: str = ""
     sonarr_api_key: str = ""
+    bazarr_url: str = ""
+    bazarr_api_key: str = ""
     overseerr_url: str = ""
     overseerr_api_key: str = ""
     tautulli_url: str = ""
@@ -203,6 +217,7 @@ class AppConfig(BaseModel):
     plex: PlexConfig = PlexConfig()
     radarr: RadarrConfig = RadarrConfig()
     sonarr: SonarrConfig = SonarrConfig()
+    bazarr: BazarrConfig = BazarrConfig()
     overseerr: OverseerrConfig = OverseerrConfig()
     tautulli: TautulliConfig = TautulliConfig()
     filebot: FileBotConfig = FileBotConfig()

@@ -56,6 +56,12 @@ class SonarrSetupRequest(BaseModel):
     api_key: str = Field(..., description="Sonarr API key")
 
 
+class BazarrSetupRequest(BaseModel):
+    """Bazarr setup configuration."""
+    url: str = Field(..., description="Bazarr URL (e.g., http://192.168.1.100:6767)")
+    api_key: str = Field(..., description="Bazarr API key")
+
+
 class OverseerrSetupRequest(BaseModel):
     """Overseerr setup configuration."""
     url: str = Field(..., description="Overseerr URL")
@@ -238,6 +244,50 @@ async def configure_sonarr(request: SonarrSetupRequest):
     })
     
     return {"status": "success", "message": "Sonarr configured successfully"}
+
+
+@router.post("/test/bazarr", response_model=ServiceTestResponse)
+async def test_bazarr_connection(request: BazarrSetupRequest):
+    """Test Bazarr connection."""
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            # Bazarr API endpoint to get system status
+            headers = {"X-API-KEY": request.api_key}
+            url = request.url.rstrip("/")
+            response = await client.get(f"{url}/api/system/status", headers=headers)
+            response.raise_for_status()
+            info = response.json()
+
+            return ServiceTestResponse(
+                success=True,
+                message=f"Connected to Bazarr v{info.get('data', {}).get('bazarr_version', 'unknown')}",
+                details={
+                    "version": info.get("data", {}).get("bazarr_version"),
+                }
+            )
+    except Exception as e:
+        return ServiceTestResponse(
+            success=False,
+            message=f"Connection failed: {str(e)}"
+        )
+
+
+@router.post("/configure/bazarr")
+async def configure_bazarr(request: BazarrSetupRequest):
+    """Save Bazarr configuration."""
+    test_result = await test_bazarr_connection(request)
+    if not test_result.success:
+        raise HTTPException(status_code=400, detail=test_result.message)
+
+    update_config({
+        "bazarr": {
+            "url": request.url,
+            "api_key": request.api_key,
+        }
+    })
+
+    return {"status": "success", "message": "Bazarr configured successfully"}
 
 
 @router.post("/test/overseerr", response_model=ServiceTestResponse)

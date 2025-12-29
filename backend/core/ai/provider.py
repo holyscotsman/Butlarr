@@ -2,11 +2,76 @@
 
 import os
 import json
+import asyncio
 from typing import Optional, Dict, Any, List
 from pathlib import Path
 import structlog
 
 logger = structlog.get_logger(__name__)
+
+# Retry configuration
+MAX_RETRIES = 3
+RETRY_BASE_DELAY = 1.0  # seconds
+RETRY_MAX_DELAY = 30.0  # seconds
+
+
+async def retry_with_backoff(
+    func,
+    *args,
+    max_retries: int = MAX_RETRIES,
+    base_delay: float = RETRY_BASE_DELAY,
+    max_delay: float = RETRY_MAX_DELAY,
+    retryable_exceptions: tuple = (Exception,),
+    **kwargs
+):
+    """Execute an async function with exponential backoff retry.
+
+    Args:
+        func: Async function to execute
+        max_retries: Maximum number of retry attempts
+        base_delay: Initial delay between retries (seconds)
+        max_delay: Maximum delay between retries (seconds)
+        retryable_exceptions: Tuple of exception types to retry on
+
+    Returns:
+        Result from the function
+
+    Raises:
+        Last exception if all retries fail
+    """
+    last_exception = None
+
+    for attempt in range(max_retries + 1):
+        try:
+            return await func(*args, **kwargs)
+        except retryable_exceptions as e:
+            last_exception = e
+            error_msg = str(e).lower()
+
+            # Don't retry on authentication errors or invalid requests
+            if any(err in error_msg for err in ["invalid_api_key", "authentication", "401", "403", "invalid_request"]):
+                logger.error("Non-retryable API error", error=str(e))
+                raise
+
+            if attempt < max_retries:
+                # Calculate delay with exponential backoff and jitter
+                delay = min(base_delay * (2 ** attempt), max_delay)
+                # Add jitter (±25%)
+                import random
+                delay = delay * (0.75 + random.random() * 0.5)
+
+                logger.warning(
+                    "API call failed, retrying",
+                    attempt=attempt + 1,
+                    max_retries=max_retries,
+                    delay=round(delay, 2),
+                    error=str(e)
+                )
+                await asyncio.sleep(delay)
+            else:
+                logger.error("All retry attempts failed", attempts=max_retries + 1, error=str(e))
+
+    raise last_exception
 
 # Model ID mapping - maps friendly names to actual API model IDs
 MODEL_MAPPING = {
@@ -213,46 +278,53 @@ class AIProvider:
         max_tokens: int,
         temperature: float,
     ) -> Dict[str, Any]:
-        """Generate using Anthropic Claude."""
+        """Generate using Anthropic Claude with retry logic."""
         if not self.has_anthropic:
             raise ValueError("Anthropic API key not configured")
-        
+
         import anthropic
-        
+
         if self._anthropic_client is None:
             self._anthropic_client = anthropic.AsyncAnthropic(api_key=self.anthropic_api_key)
-        
+
         model = self._resolve_model(model or "claude-sonnet-4")
-        
-        try:
-            kwargs = {
-                "model": model,
-                "max_tokens": max_tokens,
-                "messages": [{"role": "user", "content": prompt}],
-            }
-            if system_prompt:
-                kwargs["system"] = system_prompt
-            if temperature != 1.0:
-                kwargs["temperature"] = temperature
-            
-            response = await self._anthropic_client.messages.create(**kwargs)
-            
-            content = response.content[0].text
-            input_tokens = response.usage.input_tokens
-            output_tokens = response.usage.output_tokens
-            
-            return {
-                "content": content,
-                "model": model,
-                "provider": "anthropic",
-                "input_tokens": input_tokens,
-                "output_tokens": output_tokens,
-                "total_tokens": input_tokens + output_tokens,
-                "cost_usd": self._calculate_cost(model, input_tokens, output_tokens),
-            }
-        except Exception as e:
-            logger.error("Anthropic API error", error=str(e))
-            raise
+
+        kwargs = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+        if system_prompt:
+            kwargs["system"] = system_prompt
+        if temperature != 1.0:
+            kwargs["temperature"] = temperature
+
+        async def _make_request():
+            return await self._anthropic_client.messages.create(**kwargs)
+
+        # Use retry with backoff for rate limits and transient errors
+        response = await retry_with_backoff(
+            _make_request,
+            retryable_exceptions=(
+                anthropic.RateLimitError,
+                anthropic.APIConnectionError,
+                anthropic.InternalServerError,
+            )
+        )
+
+        content = response.content[0].text
+        input_tokens = response.usage.input_tokens
+        output_tokens = response.usage.output_tokens
+
+        return {
+            "content": content,
+            "model": model,
+            "provider": "anthropic",
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "total_tokens": input_tokens + output_tokens,
+            "cost_usd": self._calculate_cost(model, input_tokens, output_tokens),
+        }
     
     async def _generate_openai(
         self,
@@ -262,46 +334,53 @@ class AIProvider:
         max_tokens: int,
         temperature: float,
     ) -> Dict[str, Any]:
-        """Generate using OpenAI."""
+        """Generate using OpenAI with retry logic."""
         if not self.has_openai:
             raise ValueError("OpenAI API key not configured")
-        
+
         import openai
-        
+
         if self._openai_client is None:
             self._openai_client = openai.AsyncOpenAI(api_key=self.openai_api_key)
-        
+
         model = self._resolve_model(model or "gpt-4o-mini")
-        
+
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
-        
-        try:
-            response = await self._openai_client.chat.completions.create(
+
+        async def _make_request():
+            return await self._openai_client.chat.completions.create(
                 model=model,
                 messages=messages,
                 max_tokens=max_tokens,
                 temperature=temperature,
             )
-            
-            content = response.choices[0].message.content
-            input_tokens = response.usage.prompt_tokens
-            output_tokens = response.usage.completion_tokens
-            
-            return {
-                "content": content,
-                "model": model,
-                "provider": "openai",
-                "input_tokens": input_tokens,
-                "output_tokens": output_tokens,
-                "total_tokens": input_tokens + output_tokens,
-                "cost_usd": self._calculate_cost(model, input_tokens, output_tokens),
-            }
-        except Exception as e:
-            logger.error("OpenAI API error", error=str(e))
-            raise
+
+        # Use retry with backoff for rate limits and transient errors
+        response = await retry_with_backoff(
+            _make_request,
+            retryable_exceptions=(
+                openai.RateLimitError,
+                openai.APIConnectionError,
+                openai.InternalServerError,
+            )
+        )
+
+        content = response.choices[0].message.content
+        input_tokens = response.usage.prompt_tokens
+        output_tokens = response.usage.completion_tokens
+
+        return {
+            "content": content,
+            "model": model,
+            "provider": "openai",
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "total_tokens": input_tokens + output_tokens,
+            "cost_usd": self._calculate_cost(model, input_tokens, output_tokens),
+        }
     
     async def _generate_embedded(
         self,

@@ -3,8 +3,8 @@
 from typing import Optional, List
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
-from sqlalchemy import select, and_
+from pydantic import BaseModel, field_validator
+from sqlalchemy import select, and_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.database import get_db
@@ -88,18 +88,17 @@ async def get_bad_movies(
     else:
         query = query.order_by(Movie.title.asc())
     
-    # Get total count and size
-    count_query = select(BadMovieSuggestion).where(
+    # Get total count using SQL COUNT() - much more efficient than fetching all rows
+    count_query = select(func.count(BadMovieSuggestion.id)).where(
         and_(
             BadMovieSuggestion.is_ignored == False,
             BadMovieSuggestion.is_deleted == False,
         )
     )
-    count_result = await db.execute(count_query)
-    total = len(count_result.all())
-    
-    # Calculate total size
-    size_query = select(Movie.file_size_bytes).join(
+    total = await db.scalar(count_query) or 0
+
+    # Calculate total size using SQL SUM() - single query instead of fetching all rows
+    size_query = select(func.coalesce(func.sum(Movie.file_size_bytes), 0)).join(
         BadMovieSuggestion, BadMovieSuggestion.movie_id == Movie.id
     ).where(
         and_(
@@ -107,8 +106,7 @@ async def get_bad_movies(
             BadMovieSuggestion.is_deleted == False,
         )
     )
-    size_result = await db.execute(size_query)
-    total_size = sum(r[0] or 0 for r in size_result.all())
+    total_size = await db.scalar(size_query) or 0
     
     # Get paginated results
     query = query.offset(offset).limit(limit)
@@ -310,14 +308,13 @@ async def bulk_delete_movies(
 @router.get("/stats")
 async def get_bad_movie_stats(db: AsyncSession = Depends(get_db)):
     """Get bad movie statistics."""
-    from sqlalchemy import func
-    
+    # Use SQL aggregations for all stats in minimal queries
     total = await db.scalar(
         select(func.count(BadMovieSuggestion.id)).where(
             BadMovieSuggestion.is_deleted == False
         )
-    )
-    
+    ) or 0
+
     pending = await db.scalar(
         select(func.count(BadMovieSuggestion.id)).where(
             and_(
@@ -325,36 +322,36 @@ async def get_bad_movie_stats(db: AsyncSession = Depends(get_db)):
                 BadMovieSuggestion.is_deleted == False,
             )
         )
-    )
-    
+    ) or 0
+
     ignored = await db.scalar(
         select(func.count(BadMovieSuggestion.id)).where(
             BadMovieSuggestion.is_ignored == True
         )
-    )
-    
+    ) or 0
+
     deleted = await db.scalar(
         select(func.count(BadMovieSuggestion.id)).where(
             BadMovieSuggestion.is_deleted == True
         )
-    )
-    
-    # Calculate potential space savings
-    space_query = select(Movie.file_size_bytes).join(
-        BadMovieSuggestion, BadMovieSuggestion.movie_id == Movie.id
-    ).where(
-        and_(
-            BadMovieSuggestion.is_ignored == False,
-            BadMovieSuggestion.is_deleted == False,
+    ) or 0
+
+    # Calculate potential space savings using SQL SUM() instead of Python sum
+    potential_savings = await db.scalar(
+        select(func.coalesce(func.sum(Movie.file_size_bytes), 0)).join(
+            BadMovieSuggestion, BadMovieSuggestion.movie_id == Movie.id
+        ).where(
+            and_(
+                BadMovieSuggestion.is_ignored == False,
+                BadMovieSuggestion.is_deleted == False,
+            )
         )
-    )
-    space_result = await db.execute(space_query)
-    potential_savings = sum(r[0] or 0 for r in space_result.all())
-    
+    ) or 0
+
     return {
-        "total": total or 0,
-        "pending": pending or 0,
-        "ignored": ignored or 0,
-        "deleted": deleted or 0,
+        "total": total,
+        "pending": pending,
+        "ignored": ignored,
+        "deleted": deleted,
         "potential_savings_bytes": potential_savings,
     }

@@ -15,11 +15,13 @@ from backend.utils.config import get_config
 from backend.utils.logging import setup_logging
 from backend.core.websocket_manager import WebSocketManager
 from backend.core.scanner.manager import ScanManager
+from backend.utils.version import VERSION
 
 # Import routes
 from backend.api.routes import (
     scan,
     settings,
+    setup,
     issues,
     recommendations,
     bad_movies,
@@ -29,6 +31,9 @@ from backend.api.routes import (
     report,
     websocket_routes,
     system_routes,
+    ai_chat,
+    storage,
+    embedded_ai,
 )
 
 # Setup logging first
@@ -39,7 +44,7 @@ logger = structlog.get_logger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
-    logger.info("Starting Butlarr", version="2512.1.0")
+    logger.info("Starting Butlarr", version=VERSION)
     
     # Initialize database
     await init_db()
@@ -67,30 +72,41 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Butlarr",
     description="AI-Powered Plex Library Manager",
-    version="2512.1.0",
+    version=VERSION,
     lifespan=lifespan,
 )
 
-# CORS middleware
+# CORS middleware - Configure allowed origins from environment or use permissive defaults
+# For Docker deployments, we allow all origins since the app is typically accessed
+# via various IPs (localhost, LAN IP, Docker network IP, etc.)
+CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "").split(",") if os.environ.get("CORS_ORIGINS") else []
+
+# If CORS_ORIGINS env var is set to "*", allow all origins
+allow_all_origins = os.environ.get("CORS_ORIGINS") == "*" or not CORS_ORIGINS
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"] if allow_all_origins else CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["*"],
 )
 
-# Mount API routes
-app.include_router(scan.router, prefix="/api")
-app.include_router(settings.router, prefix="/api")
-app.include_router(issues.router, prefix="/api")
-app.include_router(recommendations.router, prefix="/api")
-app.include_router(bad_movies.router, prefix="/api")
-app.include_router(dashboard.router, prefix="/api")
-app.include_router(activity.router, prefix="/api")
-app.include_router(health.router, prefix="/api")
-app.include_router(report.router, prefix="/api")
+# Mount API routes with correct prefixes
+app.include_router(scan.router, prefix="/api/scan")
+app.include_router(settings.router, prefix="/api/settings")
+app.include_router(setup.router, prefix="/api/setup")
+app.include_router(issues.router, prefix="/api/issues")
+app.include_router(recommendations.router, prefix="/api/recommendations")
+app.include_router(bad_movies.router, prefix="/api/bad-movies")
+app.include_router(dashboard.router, prefix="/api/dashboard")
+app.include_router(activity.router, prefix="/api/activity")
+app.include_router(health.router, prefix="/api/health")
+app.include_router(report.router, prefix="/api/report")
+app.include_router(ai_chat.router, prefix="/api/ai")
 app.include_router(system_routes.router, prefix="/api")
+app.include_router(storage.router, prefix="/api/storage")
+app.include_router(embedded_ai.router, prefix="/api")
 app.include_router(websocket_routes.router, prefix="/ws")
 
 
@@ -101,7 +117,7 @@ async def root_health_check():
     from datetime import datetime
     return {
         "status": "healthy",
-        "version": "2512.1.0",
+        "version": VERSION,
         "timestamp": datetime.utcnow().isoformat(),
     }
 
@@ -129,7 +145,7 @@ else:
     async def root():
         return {
             "message": "Butlarr API",
-            "version": "2512.1.0",
+            "version": VERSION,
             "docs": "/docs",
             "note": "Frontend not built. Run: cd frontend && npm install && npm run build"
         }

@@ -24,21 +24,30 @@ export default function AIChat({ isOpen, onClose }) {
     setLoading(true)
 
     try {
-      const response = await api.post('/api/ai/chat', {
+      // api.post returns data directly, not wrapped in .data
+      const data = await api.post('/api/ai/chat', {
         message: userMessage,
         conversation_history: messages.map(m => ({ role: m.role, content: m.content }))
       })
-      
-      setMessages(prev => [...prev, { 
-        role: 'assistant', 
-        content: response.data.response,
-        tokens: response.data.tokens_used,
-        cost: response.data.cost_usd
+
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: data.response,
+        tokens: data.tokens_used,
+        cost: data.cost_usd
       }])
     } catch (error) {
-      setMessages(prev => [...prev, { 
-        role: 'assistant', 
-        content: 'Sorry, I encountered an error. Please try again.',
+      // Provide helpful error message based on the error type
+      let errorMessage = 'Sorry, I encountered an error. Please try again.'
+      if (error.message?.includes('No AI provider')) {
+        errorMessage = 'No AI provider is available. Please download the embedded AI model in Settings, or configure a cloud API key (Anthropic/OpenAI).'
+      } else if (error.message?.includes('disabled')) {
+        errorMessage = 'AI assistant is disabled. Enable it in Settings to use this feature.'
+      }
+
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: errorMessage,
         error: true
       }])
     } finally {

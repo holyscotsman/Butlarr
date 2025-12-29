@@ -16,12 +16,14 @@ export default function Recommendations() {
   const fetchRecommendations = async () => {
     setLoading(true)
     try {
-      const endpoint = activeTab === 'movies' ? '/api/recommendations/movies' : 
+      const endpoint = activeTab === 'movies' ? '/api/recommendations/movies' :
                        activeTab === 'tv' ? '/api/recommendations/tv' : '/api/recommendations/anime'
       const response = await api.get(endpoint)
-      setRecommendations(response.data.recommendations)
+      // api.get returns data directly, not wrapped in .data
+      setRecommendations(response?.recommendations || [])
     } catch (error) {
       console.error('Failed to fetch recommendations:', error)
+      setRecommendations([])
     } finally {
       setLoading(false)
     }
@@ -30,7 +32,8 @@ export default function Recommendations() {
   const fetchStats = async () => {
     try {
       const response = await api.get('/api/recommendations/stats')
-      setStats(response.data)
+      // api.get returns data directly
+      setStats(response)
     } catch (error) {
       console.error('Failed to fetch stats:', error)
     }

@@ -1,18 +1,21 @@
 import { NavLink } from 'react-router-dom'
-import { 
-  LayoutDashboard, 
-  Sparkles, 
-  Trash2, 
-  AlertTriangle, 
+import {
+  LayoutDashboard,
+  Sparkles,
+  Trash2,
+  AlertTriangle,
   HardDrive,
   Activity,
   Settings,
   MessageSquare,
   Menu,
-  X
+  X,
+  Zap,
+  FileText
 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import AIChat from './AIChat'
+import ButlarrLogo from './ButlarrLogo'
 
 const navItems = [
   { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
@@ -22,11 +25,36 @@ const navItems = [
   { path: '/storage', icon: HardDrive, label: 'Storage' },
   { path: '/activity', icon: Activity, label: 'Activity' },
   { path: '/settings', icon: Settings, label: 'Settings' },
+  { path: '/logs', icon: FileText, label: 'Logs' },
 ]
 
 export default function Layout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [chatOpen, setChatOpen] = useState(false)
+  const [version, setVersion] = useState(null) // Fetched from API - single source of truth
+  const [glitchEnabled, setGlitchEnabled] = useState(() => {
+    // Load from localStorage
+    const saved = localStorage.getItem('butlarr-glitch')
+    return saved === 'true'
+  })
+
+  // Fetch version from API on mount - ensures frontend always shows correct version
+  useEffect(() => {
+    fetch('/api/system/info')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => data && setVersion(data.version))
+      .catch(() => {}) // Silently fail - version display is non-critical
+  }, [])
+
+  // Apply glitch class to body
+  useEffect(() => {
+    if (glitchEnabled) {
+      document.body.classList.add('glitch-enabled')
+    } else {
+      document.body.classList.remove('glitch-enabled')
+    }
+    localStorage.setItem('butlarr-glitch', glitchEnabled)
+  }, [glitchEnabled])
 
   return (
     <div className="min-h-screen bg-cyber-dark cyber-grid">
@@ -37,15 +65,15 @@ export default function Layout({ children }) {
       <aside className={`fixed left-0 top-0 h-full bg-cyber-panel border-r border-cyber-border z-40 transition-all duration-300 ${sidebarOpen ? 'w-64' : 'w-16'}`}>
         {/* Logo */}
         <div className="h-16 flex items-center justify-between px-4 border-b border-cyber-border">
-          {sidebarOpen && (
+          {sidebarOpen ? (
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-cyber-accent rounded-lg flex items-center justify-center">
-                <span className="text-cyber-dark font-bold text-lg">B</span>
-              </div>
-              <span className="font-bold text-xl text-cyber-accent">Butlarr</span>
+              <ButlarrLogo size={36} animated={glitchEnabled} />
+              <span className={`font-bold text-xl text-cyber-accent ${glitchEnabled ? 'glitch-text logo-glitch' : ''}`} data-text="Butlarr">Butlarr</span>
             </div>
+          ) : (
+            <ButlarrLogo size={32} animated={glitchEnabled} />
           )}
-          <button 
+          <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
             className="p-2 hover:bg-cyber-border rounded-lg transition-colors"
           >
@@ -73,10 +101,10 @@ export default function Layout({ children }) {
           ))}
         </nav>
 
-        {/* Version */}
-        {sidebarOpen && (
+        {/* Version - fetched from API for consistency */}
+        {sidebarOpen && version && (
           <div className="absolute bottom-4 left-4 right-4 text-center">
-            <span className="text-xs text-gray-600 font-mono">v2512.0.3 Beta</span>
+            <span className="text-sm text-cyber-accent/70 font-mono cyber-glow">v{version}</span>
           </div>
         )}
       </aside>
@@ -84,16 +112,25 @@ export default function Layout({ children }) {
       {/* Main content */}
       <main className={`transition-all duration-300 ${sidebarOpen ? 'ml-64' : 'ml-16'}`}>
         {/* Header */}
-        <header className="h-16 bg-cyber-panel/80 backdrop-blur border-b border-cyber-border flex items-center justify-between px-6">
+        <header className="h-20 bg-cyber-panel/80 backdrop-blur border-b border-cyber-border flex items-center justify-between px-6">
           <div className="flex items-center gap-4">
-            <h1 className="text-lg font-semibold">AI-Powered Plex Library Management</h1>
+            <h1 className="text-xl font-semibold">AI-Powered Plex Library Management</h1>
           </div>
           <div className="flex items-center gap-3">
+            {version && <span className="text-sm text-gray-500 font-mono">v{version}</span>}
+            {/* Glitch toggle */}
+            <button
+              onClick={() => setGlitchEnabled(!glitchEnabled)}
+              title={glitchEnabled ? 'Disable glitch effects' : 'Enable glitch effects'}
+              className={`p-2 rounded-lg transition-all ${glitchEnabled ? 'bg-cyber-pink/20 text-cyber-pink border border-cyber-pink/50' : 'text-gray-500 hover:bg-cyber-border hover:text-gray-300'}`}
+            >
+              <Zap size={20} className={glitchEnabled ? 'animate-pulse' : ''} />
+            </button>
             <button
               onClick={() => setChatOpen(!chatOpen)}
-              className={`p-2 rounded-lg transition-all ${chatOpen ? 'bg-cyber-accent text-cyber-dark' : 'hover:bg-cyber-border'}`}
+              className={`p-3 rounded-lg transition-all ${chatOpen ? 'bg-cyber-accent text-cyber-dark' : 'hover:bg-cyber-border'}`}
             >
-              <MessageSquare size={20} />
+              <MessageSquare size={24} />
             </button>
           </div>
         </header>

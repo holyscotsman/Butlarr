@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import { 
-  Server, Film, Tv, Bell, BarChart, FileText, Sparkles, 
+import { useState, useEffect } from 'react'
+import {
+  Server, Film, Tv, Bell, BarChart, FileText, Sparkles,
   ChevronRight, ChevronLeft, Check, X, RefreshCw, ArrowRight
 } from 'lucide-react'
 import { api } from '../services/api'
@@ -22,7 +22,16 @@ export default function SetupWizard({ onComplete }) {
   const [configuredServices, setConfiguredServices] = useState({})
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState(null)
-  
+  const [qaMode, setQaMode] = useState(false) // Skip required services for QA testing
+  const [version, setVersion] = useState(null) // Fetched from API - single source of truth
+
+  // Fetch version from API on mount
+  useEffect(() => {
+    api.get('/api/system/info')
+      .then(data => data && setVersion(data.version))
+      .catch(() => {}) // Silently fail - version display is non-critical
+  }, [])
+
   // Form states for each service
   const [plex, setPlex] = useState({ url: '', token: '' })
   const [radarr, setRadarr] = useState({ url: '', api_key: '' })
@@ -30,23 +39,23 @@ export default function SetupWizard({ onComplete }) {
   const [overseerr, setOverseerr] = useState({ url: '', api_key: '' })
   const [tautulli, setTautulli] = useState({ url: '', api_key: '' })
   const [filebot, setFilebot] = useState({ url: '', username: '', password: '' })
-  const [ai, setAi] = useState({ anthropic_api_key: '', openai_api_key: '', ollama_url: '' })
+  const [ai, setAi] = useState({ anthropic_api_key: '', openai_api_key: '' })
 
   const testAndConfigure = async (service, endpoint, data) => {
     setTesting(true)
     setTestResult(null)
-    
+
     try {
-      // Test connection
+      // Test connection - api.post returns JSON directly (not wrapped in .data)
       const testResponse = await api.post(`/api/setup/test/${service}`, data)
-      
-      if (testResponse.data.success) {
+
+      if (testResponse.success) {
         // Configure
         await api.post(`/api/setup/configure/${service}`, data)
         setConfiguredServices(prev => ({ ...prev, [service]: true }))
-        setTestResult({ success: true, message: testResponse.data.message })
+        setTestResult({ success: true, message: testResponse.message })
       } else {
-        setTestResult({ success: false, message: testResponse.data.message })
+        setTestResult({ success: false, message: testResponse.message })
       }
     } catch (error) {
       setTestResult({ success: false, message: error.message })
@@ -89,11 +98,12 @@ export default function SetupWizard({ onComplete }) {
       case 'welcome':
         return (
           <div className="text-center py-12">
-            <div className="w-24 h-24 bg-cyber-accent rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-cyber-lg">
-              <span className="text-cyber-dark font-bold text-5xl">B</span>
+            <div className="w-28 h-28 bg-cyber-accent rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-cyber-lg pulse-glow">
+              <span className="text-cyber-dark font-bold text-6xl">B</span>
             </div>
-            <h2 className="text-3xl font-bold mb-4">Welcome to Butlarr</h2>
-            <p className="text-gray-400 max-w-lg mx-auto mb-8">
+            <h2 className="text-4xl font-bold mb-2 heading-glow">Welcome to Butlarr</h2>
+            {version && <p className="text-sm text-cyber-accent/60 font-mono mb-4">v{version}</p>}
+            <p className="text-lg text-gray-400 max-w-lg mx-auto mb-8">
               Your AI-powered Plex library management system. Let's get you set up in just a few minutes.
             </p>
             <div className="space-y-4 text-left max-w-md mx-auto">
@@ -119,20 +129,44 @@ export default function SetupWizard({ onComplete }) {
 
       case 'plex':
         return (
-          <ServiceSetupStep
-            title="Connect to Plex"
-            description="Plex is required for Butlarr to work. Enter your server details below."
-            required={true}
-            fields={[
-              { key: 'url', label: 'Server URL', value: plex.url, onChange: (v) => setPlex(p => ({ ...p, url: v })), placeholder: 'http://192.168.1.100:32400' },
-              { key: 'token', label: 'X-Plex-Token', value: plex.token, onChange: (v) => setPlex(p => ({ ...p, token: v })), placeholder: 'Your Plex authentication token', type: 'password' },
-            ]}
-            helpText="You can find your Plex token in the XML of any library item URL or in the Plex Web App developer console."
-            onTest={() => testAndConfigure('plex', '/api/setup/test/plex', plex)}
-            testing={testing}
-            testResult={testResult}
-            configured={configuredServices.plex}
-          />
+          <div className="space-y-6">
+            <ServiceSetupStep
+              title="Connect to Plex"
+              description="Plex is required for Butlarr to work. Enter your server details below."
+              required={!qaMode}
+              fields={[
+                { key: 'url', label: 'Server URL', value: plex.url, onChange: (v) => setPlex(p => ({ ...p, url: v })), placeholder: 'http://192.168.1.100:32400' },
+                { key: 'token', label: 'X-Plex-Token', value: plex.token, onChange: (v) => setPlex(p => ({ ...p, token: v })), placeholder: 'Your Plex authentication token', type: 'password' },
+              ]}
+              helpText="You can find your Plex token in the XML of any library item URL or in the Plex Web App developer console."
+              onTest={() => testAndConfigure('plex', '/api/setup/test/plex', plex)}
+              testing={testing}
+              testResult={testResult}
+              configured={configuredServices.plex}
+            />
+
+            {/* QA Mode Skip Option */}
+            {!configuredServices.plex && (
+              <div className="mt-6 p-4 border border-cyber-yellow/30 bg-cyber-yellow/5 rounded-xl">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-cyber-yellow font-medium">QA Testing Mode</p>
+                    <p className="text-sm text-gray-400">Skip Plex setup to test other features</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setQaMode(true)
+                      setConfiguredServices(prev => ({ ...prev, plex: 'skipped' }))
+                      nextStep()
+                    }}
+                    className="px-4 py-2 border border-cyber-yellow text-cyber-yellow rounded-lg hover:bg-cyber-yellow/10 transition-colors"
+                  >
+                    Skip for QA
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         )
 
       case 'radarr':
@@ -232,7 +266,7 @@ export default function SetupWizard({ onComplete }) {
 
             <div className="cyber-card">
               <h3 className="font-semibold mb-4">Anthropic (Recommended)</h3>
-              <input 
+              <input
                 type="password"
                 placeholder="sk-ant-api..."
                 value={ai.anthropic_api_key}
@@ -244,7 +278,7 @@ export default function SetupWizard({ onComplete }) {
 
             <div className="cyber-card">
               <h3 className="font-semibold mb-4">OpenAI (Alternative)</h3>
-              <input 
+              <input
                 type="password"
                 placeholder="sk-..."
                 value={ai.openai_api_key}
@@ -254,16 +288,14 @@ export default function SetupWizard({ onComplete }) {
               <p className="text-xs text-gray-500 mt-2">Powers GPT-5 Mini for budget-friendly curation.</p>
             </div>
 
-            <div className="cyber-card">
-              <h3 className="font-semibold mb-4">Ollama (Free, Local)</h3>
-              <input 
-                type="text"
-                placeholder="http://host.docker.internal:11434"
-                value={ai.ollama_url}
-                onChange={(e) => setAi(prev => ({ ...prev, ollama_url: e.target.value }))}
-                className="cyber-input"
-              />
-              <p className="text-xs text-gray-500 mt-2">Run AI models locally for free assistant chat.</p>
+            <div className="p-4 border border-cyber-accent/30 bg-cyber-accent/5 rounded-xl">
+              <div className="flex items-center gap-3">
+                <Sparkles className="text-cyber-accent" size={20} />
+                <div>
+                  <p className="text-cyber-accent font-medium">Free Local AI Available</p>
+                  <p className="text-sm text-gray-400">You can download a free embedded AI model in Settings after setup.</p>
+                </div>
+              </div>
             </div>
 
             <button
@@ -290,14 +322,17 @@ export default function SetupWizard({ onComplete }) {
             </p>
             
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-2xl mx-auto mb-8">
-              {Object.entries(configuredServices).map(([service, configured]) => (
+              {Object.entries(configuredServices).map(([service, status]) => (
                 <div key={service} className="cyber-card text-center">
-                  {configured ? (
+                  {status === 'skipped' ? (
+                    <span className="text-cyber-yellow mx-auto block text-lg">⊘</span>
+                  ) : status ? (
                     <Check className="text-cyber-green mx-auto" size={24} />
                   ) : (
                     <X className="text-gray-600 mx-auto" size={24} />
                   )}
                   <p className="text-sm mt-2 capitalize">{service}</p>
+                  {status === 'skipped' && <span className="text-xs text-cyber-yellow">Skipped</span>}
                 </div>
               ))}
             </div>
@@ -312,13 +347,22 @@ export default function SetupWizard({ onComplete }) {
   }
 
   const currentStepData = steps[currentStep]
-  const canProceed = currentStepData.id === 'welcome' || 
+  const canProceed = currentStepData.id === 'welcome' ||
                      currentStepData.id === 'complete' ||
-                     !currentStepData.required || 
-                     configuredServices[currentStepData.id]
+                     !currentStepData.required ||
+                     configuredServices[currentStepData.id] ||
+                     qaMode // Allow proceeding in QA mode
 
   return (
     <div className="min-h-screen bg-cyber-dark cyber-grid flex flex-col">
+      {/* QA Mode Banner */}
+      {qaMode && (
+        <div className="bg-cyber-yellow/20 border-b border-cyber-yellow/50 px-4 py-2 text-center">
+          <span className="text-cyber-yellow font-medium">QA Mode Active</span>
+          <span className="text-gray-400 ml-2">- Some features may not work without Plex</span>
+        </div>
+      )}
+
       {/* Progress bar */}
       <div className="h-1 bg-cyber-darker">
         <div 
@@ -395,6 +439,8 @@ export default function SetupWizard({ onComplete }) {
 }
 
 function ServiceSetupStep({ title, description, fields, helpText, onTest, testing, testResult, configured, required }) {
+  const isConfigured = configured && configured !== 'skipped'
+
   return (
     <div className="space-y-6">
       <div className="text-center mb-8">
@@ -430,7 +476,7 @@ function ServiceSetupStep({ title, description, fields, helpText, onTest, testin
           </div>
         )}
 
-        <button 
+        <button
           onClick={onTest}
           disabled={testing}
           className="cyber-button-primary w-full"
@@ -440,7 +486,7 @@ function ServiceSetupStep({ title, description, fields, helpText, onTest, testin
               <RefreshCw size={18} className="mr-2 animate-spin" />
               Testing...
             </>
-          ) : configured ? (
+          ) : isConfigured ? (
             <>
               <Check size={18} className="mr-2" />
               Connected - Test Again
