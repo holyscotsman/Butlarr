@@ -15,7 +15,7 @@ NC='\033[0m' # No Color
 
 echo -e "${CYAN}"
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║              BUTLARR INSTALLER v2512.1.0                     ║"
+echo "║              BUTLARR INSTALLER                               ║"
 echo "║            AI-Powered Plex Library Manager                   ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo -e "${NC}"

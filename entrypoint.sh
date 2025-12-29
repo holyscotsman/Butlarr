@@ -15,9 +15,12 @@ REPO_URL=${BUTLARR_REPO:-""}
 AUTO_UPDATE=${AUTO_UPDATE:-"true"}
 BRANCH=${BRANCH:-"main"}
 
+# Read version from VERSION file
+APP_VERSION=$(cat /app/VERSION 2>/dev/null || echo "2512.1.2")
+
 echo "
 ╔══════════════════════════════════════════════════════════════╗
-║                    BUTLARR v2512.1.0                         ║
+║                    BUTLARR v${APP_VERSION}                          ║
 ║            AI-Powered Plex Library Manager                   ║
 ╚══════════════════════════════════════════════════════════════╝
 "

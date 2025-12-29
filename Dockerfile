@@ -1,6 +1,7 @@
 # =============================================================================
-# Butlarr Dockerfile - v2512.1.0
+# Butlarr Dockerfile
 # Multi-stage build with embedded AI support
+# Version is read from VERSION file at runtime
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -24,7 +25,6 @@ FROM python:3.11-slim-bookworm
 
 # Labels
 LABEL maintainer="Jason"
-LABEL version="2512.1.0"
 LABEL description="AI-Powered Plex Library Manager"
 
 # Environment
@@ -62,6 +62,9 @@ RUN pip install --no-cache-dir -r requirements.txt --break-system-packages
 
 # Copy backend code
 COPY backend/ ./backend/
+
+# Copy VERSION file for runtime version detection
+COPY VERSION ./VERSION
 
 # Copy built frontend from stage 1
 COPY --from=frontend-builder /build/dist ./frontend/dist
