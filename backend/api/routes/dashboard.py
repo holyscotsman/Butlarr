@@ -149,14 +149,14 @@ async def get_dashboard(db: AsyncSession = Depends(get_db)):
     latest_scan = await db.scalar(
         select(Scan).order_by(Scan.created_at.desc()).limit(1)
     )
-    
+
     scan_info = ScanInfo(
         is_running=latest_scan.status == ScanStatus.RUNNING if latest_scan else False,
         status=latest_scan.status.value if latest_scan else None,
         current_phase=latest_scan.current_phase if latest_scan else None,
         total_phases=17,
         phase_name=latest_scan.phase_name if latest_scan else None,
-        progress_percent=latest_scan.progress_percent if latest_scan else 0.0,
+        progress_percent=float(latest_scan.progress_percent or 0) if latest_scan else 0.0,
         current_item=latest_scan.current_item if latest_scan else None,
         elapsed_seconds=latest_scan.elapsed_seconds if latest_scan else None,
         estimated_remaining_seconds=latest_scan.estimated_remaining_seconds if latest_scan else None,

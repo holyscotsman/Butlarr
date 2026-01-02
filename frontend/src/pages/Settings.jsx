@@ -27,7 +27,9 @@ import {
   ExternalLink,
   CheckCircle2,
   XCircle,
-  Loader2
+  Loader2,
+  Sparkles,
+  Monitor
 } from 'lucide-react';
 import { api } from '../services/api';
 
@@ -108,7 +110,7 @@ function ServiceSection({ title, service, settings, updateSetting, testing, test
 // Main Component
 // ============================================================================
 
-export default function Settings() {
+export default function Settings({ glitchEnabled = true, onGlitchToggle = () => {} }) {
   // State management
   const [systemInfo, setSystemInfo] = useState(null);
   const [updateStatus, setUpdateStatus] = useState(null);
@@ -421,6 +423,45 @@ export default function Settings() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* UI Settings Card */}
+      <div className="cyber-card">
+        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <Monitor className="w-5 h-5 text-cyber-accent" />
+          User Interface
+        </h2>
+
+        <div className="space-y-4">
+          {/* Glitch Effect Toggle */}
+          <div className="p-4 bg-cyber-darker rounded-lg">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Sparkles className={`w-5 h-5 ${glitchEnabled ? 'text-cyber-accent' : 'text-gray-500'}`} />
+                <div>
+                  <h4 className="font-medium">Cyberpunk Glitch Effect</h4>
+                  <p className="text-sm text-gray-400">
+                    Periodic glitch animation every 5 minutes for that authentic cyberpunk feel
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => onGlitchToggle(!glitchEnabled)}
+                className={`relative w-14 h-7 rounded-full transition-all duration-300 ${
+                  glitchEnabled
+                    ? 'bg-cyber-accent shadow-[0_0_10px_rgba(0,255,255,0.5)]'
+                    : 'bg-gray-600'
+                }`}
+              >
+                <span
+                  className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow transition-all duration-300 ${
+                    glitchEnabled ? 'left-8' : 'left-1'
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Updates Card */}
