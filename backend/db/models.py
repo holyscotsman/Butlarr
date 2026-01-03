@@ -143,7 +143,12 @@ class Movie(Base):
     is_ignored = Column(Boolean, default=False)
     is_overseerr_requested = Column(Boolean, default=False)
     is_cult_classic = Column(Boolean, default=False)
-    
+
+    # Watch tracking (from Tautulli)
+    is_watched = Column(Boolean, default=False)
+    last_watched_at = Column(DateTime)
+    watch_count = Column(Integer, default=0)
+
     # Timestamps
     added_at = Column(DateTime, default=func.now())
     last_scanned = Column(DateTime)

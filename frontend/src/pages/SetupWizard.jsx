@@ -2,11 +2,11 @@ import { useState, useEffect } from 'react'
 import {
   Server, Film, Tv, Bell, BarChart, FileText, Sparkles,
   ChevronRight, ChevronLeft, Check, X, RefreshCw, ArrowRight,
-  Loader2, CheckCircle2, Subtitles
+  Loader2, CheckCircle2, Subtitles, Library
 } from 'lucide-react'
-import { api } from '../services/api'
+import { api, ws } from '../services/api'
 
-// Simplified 4-step wizard flow
+// Simplified 5-step wizard flow with clear progression
 const steps = [
   { id: 'welcome', title: 'Welcome', icon: Sparkles },
   { id: 'plex', title: 'Plex', icon: Server, required: true },
@@ -21,6 +21,8 @@ export default function SetupWizard({ onComplete }) {
   const [testing, setTesting] = useState({})
   const [testResults, setTestResults] = useState({})
   const [scanStarted, setScanStarted] = useState(false)
+  const [scanProgress, setScanProgress] = useState(null)
+  const [scanComplete, setScanComplete] = useState(false)
   const [version, setVersion] = useState(null)
 
   // Form states for services
@@ -40,6 +42,22 @@ export default function SetupWizard({ onComplete }) {
       .catch(() => {})
   }, [])
 
+  // WebSocket for real-time scan progress
+  useEffect(() => {
+    if (scanStarted && !scanComplete) {
+      ws.connect('scan', (data) => {
+        if (data.type === 'scan_progress') {
+          setScanProgress(data)
+        } else if (data.type === 'scan_complete') {
+          setScanComplete(true)
+          setScanProgress(null)
+        }
+      })
+
+      return () => ws.disconnect('scan')
+    }
+  }, [scanStarted, scanComplete])
+
   // Test and configure a single service
   const testService = async (service, data) => {
     setTesting(prev => ({ ...prev, [service]: true }))
@@ -53,11 +71,11 @@ export default function SetupWizard({ onComplete }) {
         setConfiguredServices(prev => ({ ...prev, [service]: true }))
         setTestResults(prev => ({ ...prev, [service]: { success: true, message: response.message } }))
 
-        // Start background scan after Plex is configured
+        // Start background Library Sync after Plex is configured
         if (service === 'plex' && !scanStarted) {
           setScanStarted(true)
-          // Don't await - let it run in background
-          api.post('/api/scan/start', { phases: [1, 2], skip_ai_curator: true }).catch(() => {})
+          // Only run Phase 1 (Library Sync) during setup - gets movies, shows, episodes
+          api.post('/api/scan/start', { phases: [1] }).catch(() => {})
         }
 
         return true
@@ -253,13 +271,54 @@ export default function SetupWizard({ onComplete }) {
             </div>
 
             {scanStarted && (
-              <div className="p-4 bg-cyber-accent/10 border border-cyber-accent/30 rounded-lg">
-                <div className="flex items-center gap-2 text-cyber-accent">
-                  <Loader2 size={18} className="animate-spin" />
-                  <span className="font-medium">Library scan started in background</span>
+              <div className={`p-4 rounded-lg border transition-all ${
+                scanComplete
+                  ? 'bg-cyber-green/10 border-cyber-green/30'
+                  : 'bg-cyber-accent/10 border-cyber-accent/30'
+              }`}>
+                <div className="flex items-center gap-2 mb-2">
+                  {scanComplete ? (
+                    <>
+                      <CheckCircle2 size={18} className="text-cyber-green" />
+                      <span className="font-medium text-cyber-green">Library scan complete!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Library size={18} className="text-cyber-accent animate-pulse" />
+                      <span className="font-medium text-cyber-accent">Scanning your library...</span>
+                    </>
+                  )}
                 </div>
-                <p className="text-sm text-gray-400 mt-1">
-                  Your Plex library is being scanned. You can continue with setup.
+
+                {!scanComplete && scanProgress && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-400">{scanProgress.phase_name || 'Initializing'}</span>
+                      <span className="text-cyber-accent font-mono">{(scanProgress.progress_percent || 0).toFixed(0)}%</span>
+                    </div>
+                    <div className="h-2 bg-cyber-darker rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-cyber-accent transition-all duration-300"
+                        style={{ width: `${scanProgress.progress_percent || 0}%` }}
+                      />
+                    </div>
+                    {scanProgress.current_item && (
+                      <p className="text-xs text-gray-500 truncate">{scanProgress.current_item}</p>
+                    )}
+                  </div>
+                )}
+
+                {!scanComplete && !scanProgress && (
+                  <div className="flex items-center gap-2 text-sm text-gray-400">
+                    <Loader2 size={14} className="animate-spin" />
+                    <span>Connecting to Plex...</span>
+                  </div>
+                )}
+
+                <p className="text-sm text-gray-400 mt-3">
+                  {scanComplete
+                    ? 'Your library has been indexed. Continue to configure additional services.'
+                    : 'You can continue with setup while the scan runs in the background.'}
                 </p>
               </div>
             )}

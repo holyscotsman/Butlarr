@@ -18,7 +18,7 @@ from backend.db.models import (
     Activity, ActionType, MediaType, AIUsage, Collection
 )
 from backend.utils.config import get_config
-from backend.core.integrations import PlexClient, RadarrClient, SonarrClient, OverseerrClient
+from backend.core.integrations import PlexClient, RadarrClient, SonarrClient, OverseerrClient, TautulliClient
 from backend.core.ai.provider import AIProvider
 from backend.core.ai.curator import AICurator
 
@@ -291,91 +291,174 @@ class ScanManager:
     # PHASE 1: Library Sync
     # =========================================================================
     async def _phase_library_sync(self, config):
-        """Sync library from Plex with pagination."""
+        """Sync library from Plex with pagination, episodes, and Tautulli watch data."""
         if not config.plex.is_configured:
             logger.warning("Plex not configured, skipping library sync")
             return
-        
+
         path_mappings = self._get_path_mappings(config)
         plex = PlexClient(config.plex.url, config.plex.token, path_mappings)
-        
+
+        # Initialize Tautulli if configured
+        tautulli = None
+        if hasattr(config, 'tautulli') and config.tautulli.is_configured:
+            tautulli = TautulliClient(config.tautulli.url, config.tautulli.api_key)
+            logger.info("Tautulli integration enabled for watch history")
+
         try:
             async with get_db_session() as db:
                 server_info = await plex.get_server_info()
                 logger.info("Connected to Plex", server=server_info.get("friendlyName", "Unknown"))
-                
-                # Sync movies with progress
+
+                # =============================================
+                # STEP 1: Sync Movies (0-30%)
+                # =============================================
+                await self._broadcast_progress(1, "Library Sync", 0, "Fetching movies from Plex...")
                 logger.info("Fetching all movies from Plex (paginated)")
                 movies = await plex.get_all_movies()
                 total_movies = len(movies)
                 logger.info("Found movies in Plex", count=total_movies)
-                
+
                 for i, plex_movie in enumerate(movies):
                     if self._stop_requested:
                         break
-                    
-                    if i % 50 == 0 or i == total_movies - 1:
-                        progress = int(((i + 1) / max(total_movies, 1)) * 45)
+
+                    progress = int(((i + 1) / max(total_movies, 1)) * 30)
+                    if i % 25 == 0 or i == total_movies - 1:
                         await self._broadcast_progress(
                             1, "Library Sync", progress,
-                            f"Movies: {i+1}/{total_movies}"
+                            f"Movies: {i+1}/{total_movies} - {plex_movie.get('title', 'Unknown')[:40]}"
                         )
-                    
+
                     try:
-                        await self._upsert_movie(db, plex, plex_movie)
+                        movie = await self._upsert_movie(db, plex, plex_movie)
+
+                        # Fetch watch history from Tautulli
+                        if tautulli and movie:
+                            try:
+                                is_watched = await tautulli.is_watched(plex_movie.get("ratingKey"))
+                                last_watched = await tautulli.get_last_watched(plex_movie.get("ratingKey"))
+                                if is_watched is not None:
+                                    movie.is_watched = is_watched
+                                if last_watched:
+                                    movie.last_watched_at = datetime.fromtimestamp(last_watched)
+                            except Exception as e:
+                                logger.debug("Failed to get Tautulli data for movie",
+                                           title=plex_movie.get("title"), error=str(e))
                     except Exception as e:
-                        logger.warning("Failed to sync movie", 
+                        logger.warning("Failed to sync movie",
                                       title=plex_movie.get("title"), error=str(e))
-                
+
                 await db.commit()
                 self._stats["movies_scanned"] = total_movies
-                
-                # Sync TV shows
+
+                # =============================================
+                # STEP 2: Sync TV Shows (30-50%)
+                # =============================================
+                await self._broadcast_progress(1, "Library Sync", 30, "Fetching TV shows from Plex...")
                 logger.info("Fetching all TV shows from Plex (paginated)")
                 shows = await plex.get_all_shows()
                 total_shows = len(shows)
                 logger.info("Found TV shows in Plex", count=total_shows)
-                
+
+                synced_shows = []
                 for i, plex_show in enumerate(shows):
                     if self._stop_requested:
                         break
-                    
-                    if i % 20 == 0 or i == total_shows - 1:
-                        progress = 45 + int(((i + 1) / max(total_shows, 1)) * 45)
+
+                    progress = 30 + int(((i + 1) / max(total_shows, 1)) * 20)
+                    if i % 10 == 0 or i == total_shows - 1:
                         await self._broadcast_progress(
                             1, "Library Sync", progress,
-                            f"TV Shows: {i+1}/{total_shows}"
+                            f"TV Shows: {i+1}/{total_shows} - {plex_show.get('title', 'Unknown')[:40]}"
                         )
-                    
+
                     try:
-                        await self._upsert_show(db, plex, plex_show)
+                        show = await self._upsert_show(db, plex, plex_show)
+                        if show:
+                            synced_shows.append((show, plex_show.get("ratingKey")))
                     except Exception as e:
-                        logger.warning("Failed to sync show", 
+                        logger.warning("Failed to sync show",
                                       title=plex_show.get("title"), error=str(e))
-                
+
                 await db.commit()
                 self._stats["tv_shows_scanned"] = total_shows
-                
+
+                # =============================================
+                # STEP 3: Sync Seasons & Episodes (50-90%)
+                # =============================================
+                await self._broadcast_progress(1, "Library Sync", 50, "Fetching seasons and episodes...")
+                logger.info("Fetching seasons and episodes for all shows")
+
+                total_episodes = 0
+                for idx, (show, rating_key) in enumerate(synced_shows):
+                    if self._stop_requested:
+                        break
+
+                    progress = 50 + int(((idx + 1) / max(len(synced_shows), 1)) * 40)
+                    if idx % 5 == 0 or idx == len(synced_shows) - 1:
+                        await self._broadcast_progress(
+                            1, "Library Sync", progress,
+                            f"Episodes: {show.title[:30]} ({idx+1}/{len(synced_shows)} shows)"
+                        )
+
+                    try:
+                        seasons = await plex.get_seasons(rating_key)
+                        for plex_season in seasons:
+                            season = await self._upsert_season(db, show, plex_season)
+                            if season:
+                                episodes = await plex.get_episodes(plex_season.get("ratingKey"))
+                                for plex_episode in episodes:
+                                    await self._upsert_episode(db, plex, season, plex_episode, tautulli)
+                                    total_episodes += 1
+                    except Exception as e:
+                        logger.warning("Failed to sync seasons/episodes",
+                                      show=show.title, error=str(e))
+
+                await db.commit()
+                self._stats["episodes_scanned"] = total_episodes
+
+                # =============================================
+                # STEP 4: Sync Collections (90-100%)
+                # =============================================
+                await self._broadcast_progress(1, "Library Sync", 90, "Syncing collections...")
+                logger.info("Syncing Plex collections")
+
+                try:
+                    libraries = await plex.get_libraries()
+                    for lib in libraries:
+                        if lib.get("type") == "movie":
+                            collections = await plex.get_collections(lib["key"])
+                            for coll in collections:
+                                await self._upsert_collection(db, plex, coll)
+                except Exception as e:
+                    logger.warning("Failed to sync collections", error=str(e))
+
+                await db.commit()
+
                 await self._update_scan_stats(
-                    movies_scanned=total_movies, 
+                    movies_scanned=total_movies,
                     tv_shows_scanned=total_shows
                 )
-                
-                logger.info("Library sync complete", movies=total_movies, shows=total_shows)
+
+                logger.info("Library sync complete",
+                           movies=total_movies, shows=total_shows, episodes=total_episodes)
+
+                await self._broadcast_progress(1, "Library Sync", 100, "Library sync complete!")
         finally:
             await plex.close()
     
-    async def _upsert_movie(self, db: AsyncSession, plex: PlexClient, plex_movie: Dict):
-        """Insert or update a movie."""
+    async def _upsert_movie(self, db: AsyncSession, plex: PlexClient, plex_movie: Dict) -> Optional[Movie]:
+        """Insert or update a movie. Returns the movie object."""
         rating_key = str(plex_movie.get("ratingKey"))
-        
+
         movie = await db.scalar(
             select(Movie).where(Movie.plex_rating_key == rating_key)
         )
-        
+
         media_info = plex.extract_media_info(plex_movie)
         ratings = plex.extract_ratings(plex_movie)
-        
+
         data = {
             "title": plex_movie.get("title", "Unknown"),
             "year": plex_movie.get("year"),
@@ -397,25 +480,27 @@ class ScanManager:
             "bitrate": media_info.get("bitrate"),
             "last_scanned": datetime.utcnow(),
         }
-        
+
         if movie:
             for key, value in data.items():
                 setattr(movie, key, value)
         else:
             movie = Movie(plex_rating_key=rating_key, **data)
             db.add(movie)
-    
-    async def _upsert_show(self, db: AsyncSession, plex: PlexClient, plex_show: Dict):
-        """Insert or update a TV show."""
+
+        return movie
+
+    async def _upsert_show(self, db: AsyncSession, plex: PlexClient, plex_show: Dict) -> Optional[TVShow]:
+        """Insert or update a TV show. Returns the show object."""
         rating_key = str(plex_show.get("ratingKey"))
-        
+
         show = await db.scalar(
             select(TVShow).where(TVShow.plex_rating_key == rating_key)
         )
-        
+
         ratings = plex.extract_ratings(plex_show)
         library_title = plex_show.get("librarySectionTitle", "").lower()
-        
+
         media_type = MediaType.TV_SHOW
         if "anime" in library_title:
             media_type = MediaType.ANIME if "18" not in library_title else MediaType.ANIME18
@@ -423,7 +508,7 @@ class ScanManager:
             media_type = MediaType.CARTOON
         elif "game show" in library_title:
             media_type = MediaType.GAME_SHOW
-        
+
         data = {
             "title": plex_show.get("title", "Unknown"),
             "year": plex_show.get("year"),
@@ -435,13 +520,117 @@ class ScanManager:
             "media_type": media_type,
             "last_scanned": datetime.utcnow(),
         }
-        
+
         if show:
             for key, value in data.items():
                 setattr(show, key, value)
         else:
             show = TVShow(plex_rating_key=rating_key, **data)
             db.add(show)
+
+        return show
+
+    async def _upsert_season(self, db: AsyncSession, show: TVShow, plex_season: Dict) -> Optional[TVSeason]:
+        """Insert or update a TV season. Returns the season object."""
+        rating_key = str(plex_season.get("ratingKey"))
+
+        season = await db.scalar(
+            select(TVSeason).where(TVSeason.plex_rating_key == rating_key)
+        )
+
+        data = {
+            "show_id": show.id,
+            "season_number": plex_season.get("index", 0),
+            "title": plex_season.get("title", f"Season {plex_season.get('index', 0)}"),
+            "summary": plex_season.get("summary"),
+            "episode_count": plex_season.get("leafCount", 0),
+        }
+
+        if season:
+            for key, value in data.items():
+                setattr(season, key, value)
+        else:
+            season = TVSeason(plex_rating_key=rating_key, **data)
+            db.add(season)
+
+        return season
+
+    async def _upsert_episode(
+        self,
+        db: AsyncSession,
+        plex: PlexClient,
+        season: TVSeason,
+        plex_episode: Dict,
+        tautulli: Optional[TautulliClient] = None
+    ) -> Optional[TVEpisode]:
+        """Insert or update a TV episode. Returns the episode object."""
+        rating_key = str(plex_episode.get("ratingKey"))
+
+        episode = await db.scalar(
+            select(TVEpisode).where(TVEpisode.plex_rating_key == rating_key)
+        )
+
+        media_info = plex.extract_media_info(plex_episode)
+
+        data = {
+            "season_id": season.id,
+            "episode_number": plex_episode.get("index", 0),
+            "title": plex_episode.get("title", f"Episode {plex_episode.get('index', 0)}"),
+            "summary": plex_episode.get("summary"),
+            "duration_ms": plex_episode.get("duration"),
+            "file_path": media_info.get("file_path"),
+            "file_size_bytes": media_info.get("file_size_bytes"),
+            "container": media_info.get("container"),
+            "video_codec": media_info.get("video_codec"),
+            "audio_codec": media_info.get("audio_codec"),
+            "resolution": media_info.get("resolution"),
+        }
+
+        # Parse aired date if available
+        aired_at = plex_episode.get("originallyAvailableAt")
+        if aired_at:
+            try:
+                data["aired_at"] = datetime.strptime(aired_at, "%Y-%m-%d")
+            except (ValueError, TypeError):
+                pass
+
+        if episode:
+            for key, value in data.items():
+                setattr(episode, key, value)
+        else:
+            episode = TVEpisode(plex_rating_key=rating_key, **data)
+            db.add(episode)
+
+        return episode
+
+    async def _upsert_collection(self, db: AsyncSession, plex: PlexClient, plex_coll: Dict) -> Optional[Collection]:
+        """Insert or update a collection. Returns the collection object."""
+        rating_key = str(plex_coll.get("ratingKey"))
+
+        collection = await db.scalar(
+            select(Collection).where(Collection.plex_rating_key == rating_key)
+        )
+
+        data = {
+            "title": plex_coll.get("title", "Unknown Collection"),
+            "summary": plex_coll.get("summary"),
+        }
+
+        # Try to get item count
+        try:
+            items = await plex.get_collection_items(rating_key)
+            data["total_movies_owned"] = len(items)
+        except Exception:
+            pass
+
+        if collection:
+            for key, value in data.items():
+                setattr(collection, key, value)
+        else:
+            collection = Collection(plex_rating_key=rating_key, **data)
+            db.add(collection)
+
+        return collection
     
     # =========================================================================
     # PHASE 2: AI Curation
@@ -1291,7 +1480,23 @@ class ScanManager:
                 await db.commit()
     
     async def _broadcast_progress(self, phase: int, phase_name: str, percent: int, item: str):
-        """Broadcast progress via WebSocket."""
+        """Broadcast progress via WebSocket and update database."""
+        # Update database with current progress
+        try:
+            async with get_db_session() as db:
+                scan = await db.get(Scan, self.current_scan_id)
+                if scan:
+                    scan.current_phase = phase
+                    scan.phase_name = phase_name
+                    scan.progress_percent = float(percent)
+                    scan.current_item = item
+                    if self._start_time:
+                        scan.elapsed_seconds = int((datetime.utcnow() - self._start_time).total_seconds())
+                    await db.commit()
+        except Exception as e:
+            logger.warning("Failed to update scan progress in DB", error=str(e))
+
+        # Broadcast via WebSocket
         if self.ws_manager:
             await self.ws_manager.broadcast("scan", {
                 "type": "scan_progress",
