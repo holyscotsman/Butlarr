@@ -172,10 +172,12 @@ class ScanManager:
                 try:
                     await self._execute_phase(phase_num, config)
                     completed_phases.append(phase_num)
-                    
+
                     elapsed = (datetime.utcnow() - phase_start).total_seconds()
                     logger.info("Phase completed", phase=phase_num, name=phase_name, elapsed_seconds=elapsed)
-                    
+
+                    # Update database with completion and broadcast
+                    await self._update_phase(phase_num, phase_name, 100.0)
                     await self._broadcast_progress(phase_num, phase_name, 100, f"{phase_name} complete")
                     
                 except Exception as e:
@@ -1441,13 +1443,16 @@ class ScanManager:
                     scan.elapsed_seconds = int((datetime.utcnow() - self._start_time).total_seconds())
                 await db.commit()
     
-    async def _update_phase(self, phase_num: int, phase_name: str):
+    async def _update_phase(self, phase_num: int, phase_name: str, progress: float = 0.0):
         """Update current phase in database."""
         async with get_db_session() as db:
             scan = await db.get(Scan, self.current_scan_id)
             if scan:
                 scan.current_phase = phase_num
                 scan.phase_name = phase_name
+                scan.progress_percent = progress
+                if self._start_time:
+                    scan.elapsed_seconds = int((datetime.utcnow() - self._start_time).total_seconds())
                 await db.commit()
     
     async def _update_scan_stats(self, **kwargs):
@@ -1480,23 +1485,9 @@ class ScanManager:
                 await db.commit()
     
     async def _broadcast_progress(self, phase: int, phase_name: str, percent: int, item: str):
-        """Broadcast progress via WebSocket and update database."""
-        # Update database with current progress
-        try:
-            async with get_db_session() as db:
-                scan = await db.get(Scan, self.current_scan_id)
-                if scan:
-                    scan.current_phase = phase
-                    scan.phase_name = phase_name
-                    scan.progress_percent = float(percent)
-                    scan.current_item = item
-                    if self._start_time:
-                        scan.elapsed_seconds = int((datetime.utcnow() - self._start_time).total_seconds())
-                    await db.commit()
-        except Exception as e:
-            logger.warning("Failed to update scan progress in DB", error=str(e))
-
-        # Broadcast via WebSocket
+        """Broadcast progress via WebSocket only (database updated at phase boundaries)."""
+        # Only broadcast via WebSocket for real-time updates
+        # Database is updated at phase start/end via _update_phase to avoid SQLite deadlocks
         if self.ws_manager:
             await self.ws_manager.broadcast("scan", {
                 "type": "scan_progress",

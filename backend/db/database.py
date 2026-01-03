@@ -9,7 +9,7 @@ from typing import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
-from sqlalchemy import event
+from sqlalchemy import event, text
 
 from backend.db.models import Base
 from backend.utils.config import get_settings
@@ -89,13 +89,42 @@ async def init_db() -> None:
     """Initialize the database, creating tables if they don't exist."""
     db_path = get_db_path()
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    
+
     engine = await get_engine()
-    
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    
+
+    # Run migrations to add any missing columns
+    await _run_migrations(engine)
+
     logger.info("Database initialized", path=str(db_path))
+
+
+async def _run_migrations(engine) -> None:
+    """Add missing columns to existing tables (SQLite-compatible migrations)."""
+    migrations = [
+        # Movie watch tracking columns (v2512.1.5)
+        ("movies", "is_watched", "BOOLEAN DEFAULT 0"),
+        ("movies", "last_watched_at", "DATETIME"),
+        ("movies", "watch_count", "INTEGER DEFAULT 0"),
+    ]
+
+    async with engine.begin() as conn:
+        for table, column, column_def in migrations:
+            try:
+                # Check if column exists
+                result = await conn.execute(
+                    text(f"SELECT COUNT(*) FROM pragma_table_info('{table}') WHERE name = '{column}'")
+                )
+                exists = result.scalar() > 0
+
+                if not exists:
+                    await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {column_def}"))
+                    logger.info("Added migration column", table=table, column=column)
+            except Exception as e:
+                # Column might already exist or table doesn't exist yet
+                logger.debug("Migration skipped", table=table, column=column, reason=str(e))
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
