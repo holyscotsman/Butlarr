@@ -43,7 +43,7 @@ def _read_version() -> str:
         pass
 
     # Last resort fallback
-    return "2512.1.5"
+    return "2512.1.6"
 
 
 # Public API - single source of truth for version
