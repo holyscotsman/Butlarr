@@ -1,122 +1,126 @@
-# Butlarr 🎬🤖
+# Butlarr
 
-**AI-Powered Plex Library Manager**
+A media library manager for Plex that helps identify and remove low-quality content, find duplicates, detect issues, and keep your library organized.
 
-Butlarr is a comprehensive media library management tool that uses AI to analyze, curate, and maintain your Plex library. It integrates with Radarr, Sonarr, Overseerr, and more.
+## What It Does
 
-![Version](https://img.shields.io/badge/version-2512.1.0-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
+Butlarr scans your Plex library and integrates with your existing *arr stack to:
 
-## Features
+- Identify movies worth removing based on ratings and watch history
+- Detect duplicate files and suggest which to keep
+- Find quality issues (corrupt files, outdated codecs, wrong resolutions)
+- Check file integrity without playing every file manually
+- Analyze collections for missing entries
+- Generate recommendations for what to add next
 
-- **17-Phase Deep Scanning** - Comprehensive library analysis
-- **AI-Powered Curation** - Smart recommendations and bad movie detection
-- **Embedded AI** - Works offline with local Qwen2.5 model (no API keys needed)
-- **Cloud AI Support** - Anthropic Claude, OpenAI GPT-4, Ollama
-- **Auto-Updates** - Pull latest code on container restart
-- **Duplicate Detection** - Find and manage duplicate files
-- **Quality Analysis** - HDR, codec, bitrate, resolution checks
-- **Integrity Verification** - Detect corrupt media files
-- **Collection Management** - Find incomplete collections
-- **Real-time Progress** - WebSocket-based live updates
+## Installation
 
-## Quick Start (Unraid)
-
-### Option 1: Docker Run
+### Docker (Recommended)
 
 ```bash
 docker run -d \
   --name butlarr \
-  --restart unless-stopped \
   -p 8765:8765 \
-  -v /mnt/user/appdata/butlarr:/app/data \
-  -v /mnt/user:/media:ro \
-  -e PUID=99 \
-  -e PGID=100 \
-  -e TZ=America/New_York \
-  -e BUTLARR_REPO=https://github.com/YOUR_USERNAME/butlarr.git \
-  -e AUTO_UPDATE=true \
-  ghcr.io/YOUR_USERNAME/butlarr:latest
+  -v /path/to/data:/app/data \
+  -v /path/to/media:/media:ro \
+  ghcr.io/holyscotsman/butlarr:latest
 ```
 
-### Option 2: Build Locally
+### Docker Compose
 
-```bash
-# Clone the repo
-git clone https://github.com/YOUR_USERNAME/butlarr.git
-cd butlarr
-
-# Build and run
-docker build -t butlarr:latest .
-docker run -d \
-  --name butlarr \
-  -p 8765:8765 \
-  -v /mnt/user/appdata/butlarr:/app/data \
-  -v /mnt/user:/media:ro \
-  butlarr:latest
+```yaml
+services:
+  butlarr:
+    image: ghcr.io/holyscotsman/butlarr:latest
+    container_name: butlarr
+    ports:
+      - "8765:8765"
+    volumes:
+      - ./data:/app/data
+      - /path/to/media:/media:ro
+    environment:
+      - TZ=America/New_York
+    restart: unless-stopped
 ```
 
-## Configuration
+## Setup
 
-Access the web UI at `http://YOUR_IP:8765` and configure:
+1. Open `http://your-server:8765` in your browser
+2. Add your Plex server URL and token
+3. Optionally connect Radarr, Sonarr, Overseerr
+4. Run your first scan
 
-1. **Plex** - URL and token
-2. **Radarr** - URL and API key (optional)
-3. **Sonarr** - URL and API key (optional)
-4. **Overseerr** - URL and API key (optional)
-5. **AI** - Anthropic/OpenAI keys (optional - embedded AI works without)
+### Getting Your Plex Token
+
+The easiest way:
+1. Open any item in Plex Web
+2. Click the three dots menu → "Get Info"
+3. Click "View XML"
+4. Look for `X-Plex-Token=` in the URL
+
+## AI Features
+
+Butlarr can use AI to analyze your library and make smarter decisions about what to keep or remove.
+
+### Built-in (No API Key Required)
+
+Runs a local Qwen model. Downloads ~1GB on first use. Slower but completely free and private.
+
+### Cloud Options
+
+For faster analysis, add your API key in Settings:
+- Anthropic (Claude)
+- OpenAI (GPT-4)
+- Ollama (self-hosted)
+
+## Scan Phases
+
+| Phase | What It Does |
+|-------|--------------|
+| 1 | Sync library from Plex |
+| 2 | AI analysis (if enabled) |
+| 3-4 | Cross-reference with Radarr/Sonarr/Overseerr |
+| 5 | Find incomplete collections |
+| 6-7 | Check file organization |
+| 8-10 | Deep scan for duplicates and naming issues |
+| 11-12 | Verify file integrity |
+| 13-15 | Check audio languages, HDR, subtitles |
+| 16-17 | Storage and codec analysis |
 
 ## Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PUID` | 1000 | User ID for file permissions |
-| `PGID` | 1000 | Group ID for file permissions |
 | `TZ` | UTC | Timezone |
-| `PORT` | 8765 | Web UI port |
-| `BUTLARR_REPO` | - | GitHub repo URL for auto-updates |
-| `AUTO_UPDATE` | true | Enable auto-updates on restart |
-| `BRANCH` | main | Git branch to track |
-| `EMBEDDED_AI` | true | Download embedded AI model |
+| `PORT` | 8765 | Web interface port |
 | `LOG_LEVEL` | info | Logging verbosity |
+| `AUTO_UPDATE` | true | Pull latest on restart |
+| `EMBEDDED_AI` | true | Enable local AI model |
 
-## Updating
+## Path Mapping
 
-### Automatic (Recommended)
-Simply restart the container - it pulls the latest code automatically.
+If Plex sees files at `/movies` but your container sees them at `/media/Movies`, configure path mappings in Settings → Path Mappings.
 
-### Manual
-1. Go to Settings in the web UI
-2. Click "Check for Updates"
-3. Click "Apply Update" if available
-4. Restart the container
+## FAQ
 
-### From Command Line
-```bash
-docker restart butlarr
-```
+**Why is the first scan slow?**
 
-## AI Providers
+The initial library sync fetches metadata for every item. Subsequent scans are faster as they only check for changes.
 
-### Embedded AI (Default)
-- **Model**: Qwen2.5-1.5B-Instruct (Q4 quantized)
-- **Size**: ~1GB download on first run
-- **Speed**: ~10-30 tokens/sec on CPU
-- **Cost**: Free!
-- **Quality**: Good for basic analysis
+**Will this delete my files?**
 
-### Cloud APIs (Optional, Faster)
-- **Anthropic Claude** - Best quality, recommended
-- **OpenAI GPT-4** - Great alternative
-- **Ollama** - Self-hosted option
+No. Butlarr only identifies issues and makes recommendations. You decide what to do with them.
+
+**Does it work with Jellyfin/Emby?**
+
+Not currently. Plex only for now.
 
 ## Development
 
 ```bash
 # Backend
-cd backend
-pip install -r ../requirements.txt
-uvicorn main:app --reload
+pip install -r requirements.txt
+uvicorn backend.main:app --reload
 
 # Frontend
 cd frontend
@@ -124,14 +128,8 @@ npm install
 npm run dev
 ```
 
-## API Documentation
-
-Once running, visit `http://YOUR_IP:8765/docs` for interactive API docs.
+API docs available at `/docs` when running.
 
 ## License
 
-MIT License - See LICENSE file
-
-## Credits
-
-Created with assistance from Claude (Anthropic)
+MIT
