@@ -23,6 +23,7 @@ export default function SetupWizard({ onComplete }) {
   const [scanStarted, setScanStarted] = useState(false)
   const [scanProgress, setScanProgress] = useState(null)
   const [scanComplete, setScanComplete] = useState(false)
+  const [scanError, setScanError] = useState(null)
   const [version, setVersion] = useState(null)
 
   // Form states for services
@@ -74,8 +75,13 @@ export default function SetupWizard({ onComplete }) {
         // Start background Library Sync after Plex is configured
         if (service === 'plex' && !scanStarted) {
           setScanStarted(true)
+          setScanError(null)
           // Only run Phase 1 (Library Sync) during setup - gets movies, shows, episodes
-          api.post('/api/scan/start', { phases: [1] }).catch(() => {})
+          api.post('/api/scan/start', { phases: [1] })
+            .catch((err) => {
+              setScanError(err.message || 'Failed to start library scan')
+              setScanStarted(false)
+            })
         }
 
         return true
@@ -270,14 +276,21 @@ export default function SetupWizard({ onComplete }) {
               </button>
             </div>
 
-            {scanStarted && (
+            {(scanStarted || scanError) && (
               <div className={`p-4 rounded-lg border transition-all ${
-                scanComplete
-                  ? 'bg-cyber-green/10 border-cyber-green/30'
-                  : 'bg-cyber-accent/10 border-cyber-accent/30'
+                scanError
+                  ? 'bg-cyber-red/10 border-cyber-red/30'
+                  : scanComplete
+                    ? 'bg-cyber-green/10 border-cyber-green/30'
+                    : 'bg-cyber-accent/10 border-cyber-accent/30'
               }`}>
                 <div className="flex items-center gap-2 mb-2">
-                  {scanComplete ? (
+                  {scanError ? (
+                    <>
+                      <X size={18} className="text-cyber-red" />
+                      <span className="font-medium text-cyber-red">Scan failed: {scanError}</span>
+                    </>
+                  ) : scanComplete ? (
                     <>
                       <CheckCircle2 size={18} className="text-cyber-green" />
                       <span className="font-medium text-cyber-green">Library scan complete!</span>

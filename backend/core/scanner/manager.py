@@ -409,6 +409,8 @@ class ScanManager:
                         for plex_season in seasons:
                             season = await self._upsert_season(db, show, plex_season)
                             if season:
+                                # Flush to ensure season.id is assigned before creating episodes
+                                await db.flush()
                                 episodes = await plex.get_episodes(plex_season.get("ratingKey"))
                                 for plex_episode in episodes:
                                     await self._upsert_episode(db, plex, season, plex_episode, tautulli)
