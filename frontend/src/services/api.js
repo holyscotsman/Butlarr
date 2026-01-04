@@ -18,36 +18,52 @@ const API_BASE = getApiBase()
 class ApiService {
   constructor() {
     this.baseUrl = API_BASE
+    this.defaultTimeout = 10000 // 10 second default timeout
   }
 
   async request(method, endpoint, options = {}) {
     const url = `${this.baseUrl}${endpoint}`
-    
+    const timeout = options.timeout || this.defaultTimeout
+
+    // Create abort controller for timeout
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), timeout)
+
     const config = {
       method,
       headers: {
         'Content-Type': 'application/json',
         ...options.headers,
       },
+      signal: controller.signal,
       ...options,
     }
-    
+
+    // Remove custom options that shouldn't go to fetch
+    delete config.timeout
+
     if (options.body && typeof options.body === 'object') {
       config.body = JSON.stringify(options.body)
     }
-    
+
     try {
       const response = await fetch(url, config)
-      
+      clearTimeout(timeoutId)
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
         throw new Error(errorData.detail || errorData.message || `HTTP ${response.status}`)
       }
-      
+
       // Handle empty responses
       const text = await response.text()
       return text ? JSON.parse(text) : {}
     } catch (error) {
+      clearTimeout(timeoutId)
+      if (error.name === 'AbortError') {
+        console.error(`API Timeout [${method} ${endpoint}]: Request timed out after ${timeout}ms`)
+        throw new Error('Request timed out. Please check if the server is running.')
+      }
       console.error(`API Error [${method} ${endpoint}]:`, error)
       throw error
     }
