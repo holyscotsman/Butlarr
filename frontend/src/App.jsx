@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import Layout from './components/common/Layout'
 import SetupWizard from './pages/SetupWizard'
 import Dashboard from './pages/Dashboard'
+import Movies from './pages/Movies'
 import Recommendations from './pages/Recommendations'
 import BadMovies from './pages/BadMovies'
 import Issues from './pages/Issues'
@@ -78,6 +79,7 @@ function App() {
     <Layout>
       <Routes>
         <Route path="/" element={<Dashboard />} />
+        <Route path="/movies" element={<Movies />} />
         <Route path="/recommendations" element={<Recommendations />} />
         <Route path="/bad-movies" element={<BadMovies />} />
         <Route path="/issues" element={<Issues />} />

@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard,
+  Film,
   Sparkles,
   Trash2,
   AlertTriangle,
@@ -19,6 +20,7 @@ import ButlarrLogo from './ButlarrLogo'
 
 const navItems = [
   { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
+  { path: '/movies', icon: Film, label: 'Movies' },
   { path: '/recommendations', icon: Sparkles, label: 'Recommendations' },
   { path: '/bad-movies', icon: Trash2, label: 'Bad Movies' },
   { path: '/issues', icon: AlertTriangle, label: 'Issues' },

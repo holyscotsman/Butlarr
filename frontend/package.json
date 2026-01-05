@@ -1,7 +1,7 @@
 {
   "name": "butlarr-frontend",
   "private": true,
-  "version": "2512.1.6",
+  "version": "2512.1.7",
   "type": "module",
   "scripts": {
     "dev": "vite",

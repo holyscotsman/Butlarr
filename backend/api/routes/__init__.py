@@ -15,6 +15,7 @@ from . import (
     system_routes,
     ai_chat,
     storage,
+    movies,
 )
 
 __all__ = [
@@ -32,4 +33,5 @@ __all__ = [
     "system_routes",
     "ai_chat",
     "storage",
+    "movies",
 ]
