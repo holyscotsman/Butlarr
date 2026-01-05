@@ -1,72 +1,243 @@
 import { useState, useEffect } from 'react'
 import {
   Server, Film, Tv, Bell, BarChart, FileText, Sparkles,
-  ChevronRight, ChevronLeft, Check, X, RefreshCw, ArrowRight
+  ChevronRight, ChevronLeft, Check, X, RefreshCw, ArrowRight,
+  Download, Loader2, Database, AlertTriangle
 } from 'lucide-react'
 import { api } from '../services/api'
 
 const steps = [
-  { id: 'welcome', title: 'Welcome', icon: Sparkles },
-  { id: 'plex', title: 'Plex', icon: Server, required: true },
-  { id: 'radarr', title: 'Radarr', icon: Film },
-  { id: 'sonarr', title: 'Sonarr', icon: Tv },
-  { id: 'overseerr', title: 'Overseerr', icon: Bell },
-  { id: 'tautulli', title: 'Tautulli', icon: BarChart },
-  { id: 'filebot', title: 'FileBot', icon: FileText },
+  { id: 'plex', title: 'Connect Plex', icon: Server },
+  { id: 'services', title: 'Services', icon: Database },
   { id: 'ai', title: 'AI Setup', icon: Sparkles },
-  { id: 'complete', title: 'Complete', icon: Check },
 ]
 
 export default function SetupWizard({ onComplete }) {
   const [currentStep, setCurrentStep] = useState(0)
-  const [configuredServices, setConfiguredServices] = useState({})
-  const [testing, setTesting] = useState(false)
-  const [testResult, setTestResult] = useState(null)
-  const [qaMode, setQaMode] = useState(false) // Skip required services for QA testing
-  const [version, setVersion] = useState(null) // Fetched from API - single source of truth
+  const [version, setVersion] = useState(null)
 
-  // Fetch version from API on mount
+  // Plex state
+  const [plex, setPlex] = useState({ url: '', token: '' })
+  const [plexConnected, setPlexConnected] = useState(false)
+  const [plexTesting, setPlexTesting] = useState(false)
+  const [plexResult, setPlexResult] = useState(null)
+
+  // Library fetch state
+  const [libraryLoading, setLibraryLoading] = useState(false)
+  const [libraryData, setLibraryData] = useState(null)
+
+  // Services state (all on one page)
+  const [services, setServices] = useState({
+    radarr: { url: '', api_key: '', connected: false, testing: false, result: null },
+    sonarr: { url: '', api_key: '', connected: false, testing: false, result: null },
+    overseerr: { url: '', api_key: '', connected: false, testing: false, result: null },
+    tautulli: { url: '', api_key: '', connected: false, testing: false, result: null },
+    filebot: { url: '', username: '', password: '', connected: false, testing: false, result: null },
+  })
+
+  // AI state
+  const [ai, setAi] = useState({
+    anthropic_api_key: '',
+    openai_api_key: '',
+  })
+  const [aiSaved, setAiSaved] = useState(false)
+
+  // Local LLM state
+  const [localLlm, setLocalLlm] = useState({
+    available: false,
+    downloading: false,
+    downloadProgress: 0,
+    installed: false,
+    modelName: 'Llama 3.2 3B',
+    modelSize: '2.0 GB',
+  })
+
+  // Fetch version on mount
   useEffect(() => {
     api.get('/api/system/info')
       .then(data => data && setVersion(data.version))
-      .catch(() => {}) // Silently fail - version display is non-critical
+      .catch(() => {})
+
+    // Check local LLM status
+    checkLocalLlmStatus()
   }, [])
 
-  // Form states for each service
-  const [plex, setPlex] = useState({ url: '', token: '' })
-  const [radarr, setRadarr] = useState({ url: '', api_key: '' })
-  const [sonarr, setSonarr] = useState({ url: '', api_key: '' })
-  const [overseerr, setOverseerr] = useState({ url: '', api_key: '' })
-  const [tautulli, setTautulli] = useState({ url: '', api_key: '' })
-  const [filebot, setFilebot] = useState({ url: '', username: '', password: '' })
-  const [ai, setAi] = useState({ anthropic_api_key: '', openai_api_key: '' })
-
-  const testAndConfigure = async (service, endpoint, data) => {
-    setTesting(true)
-    setTestResult(null)
-
+  const checkLocalLlmStatus = async () => {
     try {
-      // Test connection - api.post returns JSON directly (not wrapped in .data)
-      const testResponse = await api.post(`/api/setup/test/${service}`, data)
-
-      if (testResponse.success) {
-        // Configure
-        await api.post(`/api/setup/configure/${service}`, data)
-        setConfiguredServices(prev => ({ ...prev, [service]: true }))
-        setTestResult({ success: true, message: testResponse.message })
-      } else {
-        setTestResult({ success: false, message: testResponse.message })
-      }
-    } catch (error) {
-      setTestResult({ success: false, message: error.message })
-    } finally {
-      setTesting(false)
+      const status = await api.get('/api/ai/local/status')
+      setLocalLlm(prev => ({
+        ...prev,
+        available: true,
+        installed: status.installed || false,
+        modelName: status.model_name || 'Llama 3.2 3B',
+        modelSize: status.model_size || '2.0 GB',
+      }))
+    } catch {
+      // Local LLM not available
     }
   }
 
+  // Test and configure Plex
+  const testPlex = async () => {
+    setPlexTesting(true)
+    setPlexResult(null)
+
+    try {
+      const result = await api.post('/api/setup/test/plex', plex)
+
+      if (result.success) {
+        await api.post('/api/setup/configure/plex', plex)
+        setPlexConnected(true)
+        setPlexResult({ success: true, message: result.message })
+
+        // Immediately start fetching library
+        fetchLibrary()
+      } else {
+        setPlexResult({ success: false, message: result.message })
+      }
+    } catch (error) {
+      setPlexResult({ success: false, message: error.message })
+    } finally {
+      setPlexTesting(false)
+    }
+  }
+
+  // Fetch library data from Plex
+  const fetchLibrary = async () => {
+    setLibraryLoading(true)
+    try {
+      const [movies, shows] = await Promise.all([
+        api.get('/api/scan/movies/quick'),
+        api.get('/api/scan/shows/quick'),
+      ])
+
+      setLibraryData({
+        movies: movies.items || movies || [],
+        shows: shows.items || shows || [],
+        movieCount: movies.count || (movies.items || movies || []).length,
+        showCount: shows.count || (shows.items || shows || []).length,
+        duplicates: movies.duplicates || 0,
+      })
+    } catch (error) {
+      console.error('Failed to fetch library:', error)
+      // Non-critical - continue anyway
+      setLibraryData({ movies: [], shows: [], movieCount: 0, showCount: 0, duplicates: 0 })
+    } finally {
+      setLibraryLoading(false)
+    }
+  }
+
+  // Test a service
+  const testService = async (serviceName) => {
+    const service = services[serviceName]
+
+    setServices(prev => ({
+      ...prev,
+      [serviceName]: { ...prev[serviceName], testing: true, result: null }
+    }))
+
+    try {
+      const testData = serviceName === 'filebot'
+        ? { url: service.url, username: service.username, password: service.password }
+        : { url: service.url, api_key: service.api_key }
+
+      const result = await api.post(`/api/setup/test/${serviceName}`, testData)
+
+      if (result.success) {
+        await api.post(`/api/setup/configure/${serviceName}`, testData)
+        setServices(prev => ({
+          ...prev,
+          [serviceName]: { ...prev[serviceName], connected: true, result: { success: true, message: result.message } }
+        }))
+      } else {
+        setServices(prev => ({
+          ...prev,
+          [serviceName]: { ...prev[serviceName], result: { success: false, message: result.message } }
+        }))
+      }
+    } catch (error) {
+      setServices(prev => ({
+        ...prev,
+        [serviceName]: { ...prev[serviceName], result: { success: false, message: error.message } }
+      }))
+    } finally {
+      setServices(prev => ({
+        ...prev,
+        [serviceName]: { ...prev[serviceName], testing: false }
+      }))
+    }
+  }
+
+  // Update service field
+  const updateService = (serviceName, field, value) => {
+    setServices(prev => ({
+      ...prev,
+      [serviceName]: { ...prev[serviceName], [field]: value }
+    }))
+  }
+
+  // Save AI configuration
+  const saveAiConfig = async () => {
+    try {
+      await api.post('/api/setup/configure/ai', ai)
+      setAiSaved(true)
+    } catch (error) {
+      console.error('Failed to save AI config:', error)
+    }
+  }
+
+  // Download local LLM
+  const downloadLocalLlm = async () => {
+    setLocalLlm(prev => ({ ...prev, downloading: true, downloadProgress: 0 }))
+
+    try {
+      // Start download
+      await api.post('/api/ai/local/download')
+
+      // Poll for progress
+      const pollProgress = setInterval(async () => {
+        try {
+          const status = await api.get('/api/ai/local/status')
+          setLocalLlm(prev => ({
+            ...prev,
+            downloadProgress: status.download_progress || 0,
+            installed: status.installed || false,
+          }))
+
+          if (status.installed) {
+            clearInterval(pollProgress)
+            setLocalLlm(prev => ({ ...prev, downloading: false }))
+          }
+        } catch {
+          // Continue polling
+        }
+      }, 2000)
+
+      // Timeout after 10 minutes
+      setTimeout(() => {
+        clearInterval(pollProgress)
+        setLocalLlm(prev => ({ ...prev, downloading: false }))
+      }, 600000)
+    } catch (error) {
+      console.error('Failed to download LLM:', error)
+      setLocalLlm(prev => ({ ...prev, downloading: false }))
+    }
+  }
+
+  // Complete setup
   const completeSetup = async () => {
     try {
       await api.post('/api/setup/complete', { confirm: true })
+
+      // Trigger initial AI analysis if AI is configured
+      if (ai.anthropic_api_key || ai.openai_api_key || localLlm.installed) {
+        try {
+          await api.post('/api/scan/analyze', { full_analysis: true })
+        } catch {
+          // Non-critical
+        }
+      }
+
       onComplete()
     } catch (error) {
       console.error('Failed to complete setup:', error)
@@ -76,296 +247,366 @@ export default function SetupWizard({ onComplete }) {
   const nextStep = () => {
     if (currentStep < steps.length - 1) {
       setCurrentStep(currentStep + 1)
-      setTestResult(null)
     }
   }
 
   const prevStep = () => {
     if (currentStep > 0) {
       setCurrentStep(currentStep - 1)
-      setTestResult(null)
     }
   }
 
-  const skipStep = () => {
-    nextStep()
-  }
-
   const renderStep = () => {
-    const step = steps[currentStep]
-
-    switch (step.id) {
-      case 'welcome':
-        return (
-          <div className="text-center py-12">
-            <div className="w-28 h-28 bg-cyber-accent rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-cyber-lg pulse-glow">
-              <span className="text-cyber-dark font-bold text-6xl">B</span>
-            </div>
-            <h2 className="text-4xl font-bold mb-2 heading-glow">Welcome to Butlarr</h2>
-            {version && <p className="text-sm text-cyber-accent/60 font-mono mb-4">v{version}</p>}
-            <p className="text-lg text-gray-400 max-w-lg mx-auto mb-8">
-              Your AI-powered Plex library management system. Let's get you set up in just a few minutes.
-            </p>
-            <div className="space-y-4 text-left max-w-md mx-auto">
-              <div className="flex items-center gap-3 p-3 bg-cyber-darker rounded-lg">
-                <Check className="text-cyber-green" size={20} />
-                <span>AI-powered recommendations and curation</span>
-              </div>
-              <div className="flex items-center gap-3 p-3 bg-cyber-darker rounded-lg">
-                <Check className="text-cyber-green" size={20} />
-                <span>Automated file organization with FileBot</span>
-              </div>
-              <div className="flex items-center gap-3 p-3 bg-cyber-darker rounded-lg">
-                <Check className="text-cyber-green" size={20} />
-                <span>Quality scanning and issue detection</span>
-              </div>
-              <div className="flex items-center gap-3 p-3 bg-cyber-darker rounded-lg">
-                <Check className="text-cyber-green" size={20} />
-                <span>Storage optimization and duplicate detection</span>
-              </div>
-            </div>
-          </div>
-        )
-
+    switch (steps[currentStep].id) {
       case 'plex':
         return (
           <div className="space-y-6">
-            <ServiceSetupStep
-              title="Connect to Plex"
-              description="Plex is required for Butlarr to work. Enter your server details below."
-              required={!qaMode}
-              fields={[
-                { key: 'url', label: 'Server URL', value: plex.url, onChange: (v) => setPlex(p => ({ ...p, url: v })), placeholder: 'http://192.168.1.100:32400' },
-                { key: 'token', label: 'X-Plex-Token', value: plex.token, onChange: (v) => setPlex(p => ({ ...p, token: v })), placeholder: 'Your Plex authentication token', type: 'password' },
-              ]}
-              helpText="You can find your Plex token in the XML of any library item URL or in the Plex Web App developer console."
-              onTest={() => testAndConfigure('plex', '/api/setup/test/plex', plex)}
-              testing={testing}
-              testResult={testResult}
-              configured={configuredServices.plex}
-            />
+            <div className="text-center mb-8">
+              <div className="w-20 h-20 bg-cyber-accent rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-cyber-lg pulse-glow">
+                <span className="text-cyber-dark font-bold text-4xl">B</span>
+              </div>
+              <h2 className="text-3xl font-bold mb-2 heading-glow">Welcome to Butlarr</h2>
+              {version && <p className="text-sm text-cyber-accent/60 font-mono mb-2">v{version}</p>}
+              <p className="text-gray-400">Connect your Plex server to get started</p>
+            </div>
 
-            {/* QA Mode Skip Option */}
-            {!configuredServices.plex && (
-              <div className="mt-6 p-4 border border-cyber-yellow/30 bg-cyber-yellow/5 rounded-xl">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-cyber-yellow font-medium">QA Testing Mode</p>
-                    <p className="text-sm text-gray-400">Skip Plex setup to test other features</p>
+            <div className="cyber-card space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-1">Plex Server URL</label>
+                <input
+                  type="text"
+                  placeholder="http://192.168.1.100:32400"
+                  value={plex.url}
+                  onChange={(e) => setPlex(p => ({ ...p, url: e.target.value }))}
+                  className="cyber-input"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-1">X-Plex-Token</label>
+                <input
+                  type="password"
+                  placeholder="Your Plex authentication token"
+                  value={plex.token}
+                  onChange={(e) => setPlex(p => ({ ...p, token: e.target.value }))}
+                  className="cyber-input"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Find your token in any Plex library item's XML URL or browser dev tools
+                </p>
+              </div>
+
+              {plexResult && (
+                <div className={`p-3 rounded-lg ${plexResult.success ? 'bg-cyber-green/10 border border-cyber-green/30' : 'bg-cyber-red/10 border border-cyber-red/30'}`}>
+                  <div className="flex items-center gap-2">
+                    {plexResult.success ? <Check className="text-cyber-green" size={18} /> : <X className="text-cyber-red" size={18} />}
+                    <span className={plexResult.success ? 'text-cyber-green' : 'text-cyber-red'}>{plexResult.message}</span>
                   </div>
-                  <button
-                    onClick={() => {
-                      setQaMode(true)
-                      setConfiguredServices(prev => ({ ...prev, plex: 'skipped' }))
-                      nextStep()
-                    }}
-                    className="px-4 py-2 border border-cyber-yellow text-cyber-yellow rounded-lg hover:bg-cyber-yellow/10 transition-colors"
-                  >
-                    Skip for QA
-                  </button>
                 </div>
+              )}
+
+              <button
+                onClick={testPlex}
+                disabled={plexTesting || !plex.url || !plex.token}
+                className="cyber-button-primary w-full"
+              >
+                {plexTesting ? (
+                  <>
+                    <RefreshCw size={18} className="mr-2 animate-spin" />
+                    Connecting...
+                  </>
+                ) : plexConnected ? (
+                  <>
+                    <Check size={18} className="mr-2" />
+                    Connected - Test Again
+                  </>
+                ) : (
+                  <>
+                    <Server size={18} className="mr-2" />
+                    Connect to Plex
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Library Status */}
+            {plexConnected && (
+              <div className="cyber-card">
+                <h3 className="font-semibold mb-3 flex items-center gap-2">
+                  <Database size={18} className="text-cyber-accent" />
+                  Library Status
+                </h3>
+
+                {libraryLoading ? (
+                  <div className="flex items-center gap-3 text-gray-400">
+                    <Loader2 size={20} className="animate-spin" />
+                    <span>Fetching library data...</span>
+                  </div>
+                ) : libraryData ? (
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="text-center p-3 bg-cyber-darker rounded-lg">
+                      <Film size={24} className="mx-auto mb-1 text-cyber-accent" />
+                      <p className="text-2xl font-bold">{libraryData.movieCount}</p>
+                      <p className="text-xs text-gray-400">Movies</p>
+                    </div>
+                    <div className="text-center p-3 bg-cyber-darker rounded-lg">
+                      <Tv size={24} className="mx-auto mb-1 text-cyber-accent" />
+                      <p className="text-2xl font-bold">{libraryData.showCount}</p>
+                      <p className="text-xs text-gray-400">TV Shows</p>
+                    </div>
+                    <div className="text-center p-3 bg-cyber-darker rounded-lg">
+                      <AlertTriangle size={24} className="mx-auto mb-1 text-cyber-yellow" />
+                      <p className="text-2xl font-bold">{libraryData.duplicates}</p>
+                      <p className="text-xs text-gray-400">Duplicates</p>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             )}
           </div>
         )
 
-      case 'radarr':
+      case 'services':
         return (
-          <ServiceSetupStep
-            title="Connect to Radarr"
-            description="Radarr enables movie management and deletion capabilities."
-            fields={[
-              { key: 'url', label: 'Server URL', value: radarr.url, onChange: (v) => setRadarr(p => ({ ...p, url: v })), placeholder: 'http://192.168.1.100:7878' },
-              { key: 'api_key', label: 'API Key', value: radarr.api_key, onChange: (v) => setRadarr(p => ({ ...p, api_key: v })), placeholder: 'Radarr API key', type: 'password' },
-            ]}
-            helpText="Find your API key in Radarr under Settings → General → Security."
-            onTest={() => testAndConfigure('radarr', '/api/setup/test/radarr', radarr)}
-            testing={testing}
-            testResult={testResult}
-            configured={configuredServices.radarr}
-          />
-        )
+          <div className="space-y-6">
+            <div className="text-center mb-6">
+              <h2 className="text-2xl font-bold mb-2">Connect Your Services</h2>
+              <p className="text-gray-400">Configure your media management tools (all optional)</p>
+            </div>
 
-      case 'sonarr':
-        return (
-          <ServiceSetupStep
-            title="Connect to Sonarr"
-            description="Sonarr enables TV show management and organization."
-            fields={[
-              { key: 'url', label: 'Server URL', value: sonarr.url, onChange: (v) => setSonarr(p => ({ ...p, url: v })), placeholder: 'http://192.168.1.100:8989' },
-              { key: 'api_key', label: 'API Key', value: sonarr.api_key, onChange: (v) => setSonarr(p => ({ ...p, api_key: v })), placeholder: 'Sonarr API key', type: 'password' },
-            ]}
-            helpText="Find your API key in Sonarr under Settings → General → Security."
-            onTest={() => testAndConfigure('sonarr', '/api/setup/test/sonarr', sonarr)}
-            testing={testing}
-            testResult={testResult}
-            configured={configuredServices.sonarr}
-          />
-        )
+            {/* Radarr */}
+            <ServiceRow
+              name="Radarr"
+              icon={Film}
+              description="Movie management"
+              fields={[
+                { key: 'url', label: 'URL', placeholder: 'http://192.168.1.100:7878', value: services.radarr.url },
+                { key: 'api_key', label: 'API Key', placeholder: 'API Key', value: services.radarr.api_key, type: 'password' },
+              ]}
+              onChange={(field, value) => updateService('radarr', field, value)}
+              onTest={() => testService('radarr')}
+              testing={services.radarr.testing}
+              connected={services.radarr.connected}
+              result={services.radarr.result}
+            />
 
-      case 'overseerr':
-        return (
-          <ServiceSetupStep
-            title="Connect to Overseerr"
-            description="Overseerr integration protects user-requested content and enables request sending."
-            fields={[
-              { key: 'url', label: 'Server URL', value: overseerr.url, onChange: (v) => setOverseerr(p => ({ ...p, url: v })), placeholder: 'http://192.168.1.100:5055' },
-              { key: 'api_key', label: 'API Key', value: overseerr.api_key, onChange: (v) => setOverseerr(p => ({ ...p, api_key: v })), placeholder: 'Overseerr API key', type: 'password' },
-            ]}
-            helpText="Find your API key in Overseerr under Settings → General."
-            onTest={() => testAndConfigure('overseerr', '/api/setup/test/overseerr', overseerr)}
-            testing={testing}
-            testResult={testResult}
-            configured={configuredServices.overseerr}
-          />
-        )
+            {/* Sonarr */}
+            <ServiceRow
+              name="Sonarr"
+              icon={Tv}
+              description="TV show management"
+              fields={[
+                { key: 'url', label: 'URL', placeholder: 'http://192.168.1.100:8989', value: services.sonarr.url },
+                { key: 'api_key', label: 'API Key', placeholder: 'API Key', value: services.sonarr.api_key, type: 'password' },
+              ]}
+              onChange={(field, value) => updateService('sonarr', field, value)}
+              onTest={() => testService('sonarr')}
+              testing={services.sonarr.testing}
+              connected={services.sonarr.connected}
+              result={services.sonarr.result}
+            />
 
-      case 'tautulli':
-        return (
-          <ServiceSetupStep
-            title="Connect to Tautulli"
-            description="Tautulli provides watch history data (disabled by default for privacy)."
-            fields={[
-              { key: 'url', label: 'Server URL', value: tautulli.url, onChange: (v) => setTautulli(p => ({ ...p, url: v })), placeholder: 'http://192.168.1.100:8181' },
-              { key: 'api_key', label: 'API Key', value: tautulli.api_key, onChange: (v) => setTautulli(p => ({ ...p, api_key: v })), placeholder: 'Tautulli API key', type: 'password' },
-            ]}
-            helpText="Find your API key in Tautulli under Settings → Web Interface."
-            onTest={() => testAndConfigure('tautulli', '/api/setup/test/tautulli', tautulli)}
-            testing={testing}
-            testResult={testResult}
-            configured={configuredServices.tautulli}
-          />
-        )
+            {/* Overseerr */}
+            <ServiceRow
+              name="Overseerr"
+              icon={Bell}
+              description="Request management"
+              fields={[
+                { key: 'url', label: 'URL', placeholder: 'http://192.168.1.100:5055', value: services.overseerr.url },
+                { key: 'api_key', label: 'API Key', placeholder: 'API Key', value: services.overseerr.api_key, type: 'password' },
+              ]}
+              onChange={(field, value) => updateService('overseerr', field, value)}
+              onTest={() => testService('overseerr')}
+              testing={services.overseerr.testing}
+              connected={services.overseerr.connected}
+              result={services.overseerr.result}
+            />
 
-      case 'filebot':
-        return (
-          <ServiceSetupStep
-            title="Connect to FileBot Node"
-            description="FileBot Node enables automated file renaming and organization."
-            fields={[
-              { key: 'url', label: 'Server URL', value: filebot.url, onChange: (v) => setFilebot(p => ({ ...p, url: v })), placeholder: 'http://192.168.1.100:5452' },
-              { key: 'username', label: 'Username (optional)', value: filebot.username, onChange: (v) => setFilebot(p => ({ ...p, username: v })), placeholder: 'Username' },
-              { key: 'password', label: 'Password (optional)', value: filebot.password, onChange: (v) => setFilebot(p => ({ ...p, password: v })), placeholder: 'Password', type: 'password' },
-            ]}
-            helpText="FileBot Node runs as a Docker container. See the FileBot Node documentation for setup."
-            onTest={() => testAndConfigure('filebot', '/api/setup/test/filebot', filebot)}
-            testing={testing}
-            testResult={testResult}
-            configured={configuredServices.filebot}
-          />
+            {/* Tautulli */}
+            <ServiceRow
+              name="Tautulli"
+              icon={BarChart}
+              description="Watch history & stats"
+              fields={[
+                { key: 'url', label: 'URL', placeholder: 'http://192.168.1.100:8181', value: services.tautulli.url },
+                { key: 'api_key', label: 'API Key', placeholder: 'API Key', value: services.tautulli.api_key, type: 'password' },
+              ]}
+              onChange={(field, value) => updateService('tautulli', field, value)}
+              onTest={() => testService('tautulli')}
+              testing={services.tautulli.testing}
+              connected={services.tautulli.connected}
+              result={services.tautulli.result}
+            />
+
+            {/* FileBot */}
+            <ServiceRow
+              name="FileBot"
+              icon={FileText}
+              description="File organization"
+              fields={[
+                { key: 'url', label: 'URL', placeholder: 'http://192.168.1.100:5452', value: services.filebot.url },
+                { key: 'username', label: 'Username', placeholder: 'Optional', value: services.filebot.username },
+                { key: 'password', label: 'Password', placeholder: 'Optional', value: services.filebot.password, type: 'password' },
+              ]}
+              onChange={(field, value) => updateService('filebot', field, value)}
+              onTest={() => testService('filebot')}
+              testing={services.filebot.testing}
+              connected={services.filebot.connected}
+              result={services.filebot.result}
+            />
+          </div>
         )
 
       case 'ai':
         return (
           <div className="space-y-6">
-            <div className="text-center mb-8">
-              <Sparkles className="text-cyber-accent mx-auto mb-4" size={48} />
+            <div className="text-center mb-6">
+              <Sparkles className="text-cyber-accent mx-auto mb-3" size={40} />
               <h2 className="text-2xl font-bold mb-2">AI Configuration</h2>
-              <p className="text-gray-400">Configure AI providers for library curation and assistant chat.</p>
+              <p className="text-gray-400">Power your library curation with AI</p>
             </div>
 
-            <div className="cyber-card">
-              <h3 className="font-semibold mb-4">Anthropic (Recommended)</h3>
-              <input
-                type="password"
-                placeholder="sk-ant-api..."
-                value={ai.anthropic_api_key}
-                onChange={(e) => setAi(prev => ({ ...prev, anthropic_api_key: e.target.value }))}
-                className="cyber-input"
-              />
-              <p className="text-xs text-gray-500 mt-2">Powers Claude Sonnet 4.5 for curation and Haiku for chat.</p>
-            </div>
+            {/* Cloud AI Providers */}
+            <div className="cyber-card space-y-4">
+              <h3 className="font-semibold flex items-center gap-2">
+                <Sparkles size={18} className="text-cyber-accent" />
+                Cloud AI Providers
+              </h3>
 
-            <div className="cyber-card">
-              <h3 className="font-semibold mb-4">OpenAI (Alternative)</h3>
-              <input
-                type="password"
-                placeholder="sk-..."
-                value={ai.openai_api_key}
-                onChange={(e) => setAi(prev => ({ ...prev, openai_api_key: e.target.value }))}
-                className="cyber-input"
-              />
-              <p className="text-xs text-gray-500 mt-2">Powers GPT-5 Mini for budget-friendly curation.</p>
-            </div>
-
-            <div className="p-4 border border-cyber-accent/30 bg-cyber-accent/5 rounded-xl">
-              <div className="flex items-center gap-3">
-                <Sparkles className="text-cyber-accent" size={20} />
-                <div>
-                  <p className="text-cyber-accent font-medium">Free Local AI Available</p>
-                  <p className="text-sm text-gray-400">You can download a free embedded AI model in Settings after setup.</p>
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-1">Anthropic API Key (Recommended)</label>
+                <input
+                  type="password"
+                  placeholder="sk-ant-api..."
+                  value={ai.anthropic_api_key}
+                  onChange={(e) => setAi(prev => ({ ...prev, anthropic_api_key: e.target.value }))}
+                  className="cyber-input"
+                />
+                <p className="text-xs text-gray-500 mt-1">Powers Claude for intelligent curation</p>
               </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-1">OpenAI API Key (Alternative)</label>
+                <input
+                  type="password"
+                  placeholder="sk-..."
+                  value={ai.openai_api_key}
+                  onChange={(e) => setAi(prev => ({ ...prev, openai_api_key: e.target.value }))}
+                  className="cyber-input"
+                />
+              </div>
+
+              <button
+                onClick={saveAiConfig}
+                disabled={!ai.anthropic_api_key && !ai.openai_api_key}
+                className="cyber-button w-full"
+              >
+                {aiSaved ? (
+                  <>
+                    <Check size={18} className="mr-2" />
+                    Saved
+                  </>
+                ) : (
+                  'Save API Keys'
+                )}
+              </button>
             </div>
 
-            <button
-              onClick={async () => {
-                await api.post('/api/setup/configure/ai', ai)
-                setConfiguredServices(prev => ({ ...prev, ai: true }))
-              }}
-              className="cyber-button-primary w-full"
-            >
-              Save AI Configuration
-            </button>
-          </div>
-        )
+            {/* Local LLM */}
+            <div className="cyber-card space-y-4">
+              <h3 className="font-semibold flex items-center gap-2">
+                <Download size={18} className="text-cyber-accent" />
+                Free Local AI (No API Key Required)
+              </h3>
 
-      case 'complete':
-        return (
-          <div className="text-center py-12">
-            <div className="w-24 h-24 bg-cyber-green rounded-full flex items-center justify-center mx-auto mb-6">
-              <Check size={48} className="text-cyber-dark" />
-            </div>
-            <h2 className="text-3xl font-bold mb-4">Setup Complete!</h2>
-            <p className="text-gray-400 max-w-lg mx-auto mb-8">
-              Butlarr is ready to manage your Plex library. You can run your first scan from the dashboard.
-            </p>
-            
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-2xl mx-auto mb-8">
-              {Object.entries(configuredServices).map(([service, status]) => (
-                <div key={service} className="cyber-card text-center">
-                  {status === 'skipped' ? (
-                    <span className="text-cyber-yellow mx-auto block text-lg">⊘</span>
-                  ) : status ? (
-                    <Check className="text-cyber-green mx-auto" size={24} />
-                  ) : (
-                    <X className="text-gray-600 mx-auto" size={24} />
-                  )}
-                  <p className="text-sm mt-2 capitalize">{service}</p>
-                  {status === 'skipped' && <span className="text-xs text-cyber-yellow">Skipped</span>}
+              <div className="p-4 bg-cyber-darker rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <p className="font-medium">{localLlm.modelName}</p>
+                    <p className="text-sm text-gray-400">{localLlm.modelSize} download</p>
+                  </div>
+
+                  {localLlm.installed ? (
+                    <span className="flex items-center gap-1 text-cyber-green">
+                      <Check size={16} />
+                      Installed
+                    </span>
+                  ) : localLlm.downloading ? (
+                    <span className="text-cyber-accent">
+                      {localLlm.downloadProgress}%
+                    </span>
+                  ) : null}
                 </div>
-              ))}
+
+                {localLlm.downloading && (
+                  <div className="w-full bg-cyber-dark rounded-full h-2 mb-3">
+                    <div
+                      className="bg-cyber-accent h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${localLlm.downloadProgress}%` }}
+                    />
+                  </div>
+                )}
+
+                {!localLlm.installed && (
+                  <button
+                    onClick={downloadLocalLlm}
+                    disabled={localLlm.downloading}
+                    className="cyber-button-primary w-full"
+                  >
+                    {localLlm.downloading ? (
+                      <>
+                        <Loader2 size={18} className="mr-2 animate-spin" />
+                        Downloading...
+                      </>
+                    ) : (
+                      <>
+                        <Download size={18} className="mr-2" />
+                        Download Free AI Model
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+
+              <p className="text-xs text-gray-500">
+                The local model runs entirely on your server. No data is sent externally.
+              </p>
             </div>
 
-            <button onClick={completeSetup} className="cyber-button-primary text-lg px-8 py-3">
-              Go to Dashboard
-              <ArrowRight className="ml-2" size={20} />
-            </button>
+            {/* What AI Does */}
+            <div className="p-4 border border-cyber-accent/30 bg-cyber-accent/5 rounded-xl">
+              <h4 className="font-medium text-cyber-accent mb-2">After setup, AI will analyze your library to:</h4>
+              <ul className="text-sm text-gray-400 space-y-1">
+                <li className="flex items-center gap-2">
+                  <Check size={14} className="text-cyber-green" />
+                  Identify ~20 movies you should add based on your taste
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check size={14} className="text-cyber-green" />
+                  Find "bad" movies with low ratings to consider removing
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check size={14} className="text-cyber-green" />
+                  Detect duplicate files and quality issues
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check size={14} className="text-cyber-green" />
+                  Recommend TV shows and anime based on your collection
+                </li>
+              </ul>
+            </div>
           </div>
         )
     }
   }
 
-  const currentStepData = steps[currentStep]
-  const canProceed = currentStepData.id === 'welcome' ||
-                     currentStepData.id === 'complete' ||
-                     !currentStepData.required ||
-                     configuredServices[currentStepData.id] ||
-                     qaMode // Allow proceeding in QA mode
+  const canProceed = currentStep === 0 ? plexConnected : true
 
   return (
     <div className="min-h-screen bg-cyber-dark cyber-grid flex flex-col">
-      {/* QA Mode Banner */}
-      {qaMode && (
-        <div className="bg-cyber-yellow/20 border-b border-cyber-yellow/50 px-4 py-2 text-center">
-          <span className="text-cyber-yellow font-medium">QA Mode Active</span>
-          <span className="text-gray-400 ml-2">- Some features may not work without Plex</span>
-        </div>
-      )}
-
       {/* Progress bar */}
       <div className="h-1 bg-cyber-darker">
-        <div 
+        <div
           className="h-full bg-cyber-accent transition-all duration-300"
           style={{ width: `${((currentStep + 1) / steps.length) * 100}%` }}
         />
@@ -373,22 +614,27 @@ export default function SetupWizard({ onComplete }) {
 
       {/* Steps indicator */}
       <div className="border-b border-cyber-border bg-cyber-panel/50">
-        <div className="max-w-4xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-center gap-2 overflow-x-auto">
+        <div className="max-w-3xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-center gap-8">
             {steps.map((step, index) => (
-              <div 
+              <div
                 key={step.id}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors ${
-                  index === currentStep 
-                    ? 'bg-cyber-accent/10 text-cyber-accent' 
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                  index === currentStep
+                    ? 'bg-cyber-accent/10 text-cyber-accent'
                     : index < currentStep
                       ? 'text-cyber-green'
                       : 'text-gray-600'
                 }`}
               >
-                <step.icon size={16} />
-                <span className="text-sm font-medium hidden sm:inline">{step.title}</span>
-                {configuredServices[step.id] && <Check size={14} className="text-cyber-green" />}
+                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold ${
+                  index < currentStep ? 'bg-cyber-green text-cyber-dark' :
+                  index === currentStep ? 'bg-cyber-accent text-cyber-dark' : 'bg-gray-700'
+                }`}>
+                  {index < currentStep ? <Check size={14} /> : index + 1}
+                </div>
+                <step.icon size={18} />
+                <span className="font-medium">{step.title}</span>
               </div>
             ))}
           </div>
@@ -396,16 +642,16 @@ export default function SetupWizard({ onComplete }) {
       </div>
 
       {/* Content */}
-      <div className="flex-1 flex items-center justify-center p-6">
-        <div className="w-full max-w-2xl">
+      <div className="flex-1 flex items-start justify-center p-6 overflow-y-auto">
+        <div className="w-full max-w-2xl py-4">
           {renderStep()}
         </div>
       </div>
 
       {/* Navigation */}
       <div className="border-t border-cyber-border bg-cyber-panel/50">
-        <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
-          <button 
+        <div className="max-w-3xl mx-auto px-6 py-4 flex items-center justify-between">
+          <button
             onClick={prevStep}
             disabled={currentStep === 0}
             className="cyber-button disabled:opacity-50 disabled:cursor-not-allowed"
@@ -413,89 +659,102 @@ export default function SetupWizard({ onComplete }) {
             <ChevronLeft size={18} className="mr-1" />
             Back
           </button>
-          
-          <div className="flex gap-3">
-            {!currentStepData.required && currentStep > 0 && currentStep < steps.length - 1 && (
-              <button onClick={skipStep} className="text-gray-400 hover:text-white transition-colors">
-                Skip for now
-              </button>
-            )}
-            
-            {currentStep < steps.length - 1 && (
-              <button 
-                onClick={nextStep}
-                disabled={!canProceed}
-                className="cyber-button-primary disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Next
-                <ChevronRight size={18} className="ml-1" />
-              </button>
-            )}
-          </div>
+
+          {currentStep < steps.length - 1 ? (
+            <button
+              onClick={nextStep}
+              disabled={!canProceed}
+              className="cyber-button-primary disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Next
+              <ChevronRight size={18} className="ml-1" />
+            </button>
+          ) : (
+            <button
+              onClick={completeSetup}
+              className="cyber-button-primary"
+            >
+              Complete Setup
+              <ArrowRight size={18} className="ml-1" />
+            </button>
+          )}
         </div>
       </div>
     </div>
   )
 }
 
-function ServiceSetupStep({ title, description, fields, helpText, onTest, testing, testResult, configured, required }) {
-  const isConfigured = configured && configured !== 'skipped'
+// Service row component for the services page
+function ServiceRow({ name, icon: Icon, description, fields, onChange, onTest, testing, connected, result }) {
+  const [expanded, setExpanded] = useState(false)
+  const hasInput = fields.some(f => f.value)
 
   return (
-    <div className="space-y-6">
-      <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold mb-2">{title}</h2>
-        <p className="text-gray-400">{description}</p>
-        {required && <span className="cyber-badge-warning mt-2">Required</span>}
+    <div className="cyber-card">
+      <div
+        className="flex items-center justify-between cursor-pointer"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <div className="flex items-center gap-3">
+          <Icon size={20} className="text-cyber-accent" />
+          <div>
+            <p className="font-medium">{name}</p>
+            <p className="text-xs text-gray-500">{description}</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {connected && <Check size={18} className="text-cyber-green" />}
+          <ChevronRight
+            size={18}
+            className={`text-gray-400 transition-transform ${expanded ? 'rotate-90' : ''}`}
+          />
+        </div>
       </div>
 
-      <div className="cyber-card space-y-4">
-        {fields.map((field) => (
-          <div key={field.key}>
-            <label className="block text-sm font-medium text-gray-400 mb-1">{field.label}</label>
-            <input 
-              type={field.type || 'text'}
-              placeholder={field.placeholder}
-              value={field.value}
-              onChange={(e) => field.onChange(e.target.value)}
-              className="cyber-input"
-            />
+      {expanded && (
+        <div className="mt-4 pt-4 border-t border-cyber-border space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {fields.map(field => (
+              <div key={field.key}>
+                <input
+                  type={field.type || 'text'}
+                  placeholder={field.placeholder}
+                  value={field.value}
+                  onChange={(e) => onChange(field.key, e.target.value)}
+                  className="cyber-input text-sm"
+                />
+              </div>
+            ))}
           </div>
-        ))}
 
-        {helpText && (
-          <p className="text-xs text-gray-500">{helpText}</p>
-        )}
-
-        {testResult && (
-          <div className={`p-3 rounded-lg ${testResult.success ? 'bg-cyber-green/10 border border-cyber-green/30' : 'bg-cyber-red/10 border border-cyber-red/30'}`}>
-            <div className="flex items-center gap-2">
-              {testResult.success ? <Check className="text-cyber-green" size={18} /> : <X className="text-cyber-red" size={18} />}
-              <span className={testResult.success ? 'text-cyber-green' : 'text-cyber-red'}>{testResult.message}</span>
+          {result && (
+            <div className={`p-2 rounded text-sm ${result.success ? 'bg-cyber-green/10 text-cyber-green' : 'bg-cyber-red/10 text-cyber-red'}`}>
+              {result.message}
             </div>
-          </div>
-        )}
-
-        <button
-          onClick={onTest}
-          disabled={testing}
-          className="cyber-button-primary w-full"
-        >
-          {testing ? (
-            <>
-              <RefreshCw size={18} className="mr-2 animate-spin" />
-              Testing...
-            </>
-          ) : isConfigured ? (
-            <>
-              <Check size={18} className="mr-2" />
-              Connected - Test Again
-            </>
-          ) : (
-            'Test & Connect'
           )}
-        </button>
-      </div>
+
+          <button
+            onClick={(e) => { e.stopPropagation(); onTest(); }}
+            disabled={testing || !hasInput}
+            className="cyber-button text-sm w-full"
+          >
+            {testing ? (
+              <>
+                <RefreshCw size={14} className="mr-1 animate-spin" />
+                Testing...
+              </>
+            ) : connected ? (
+              <>
+                <Check size={14} className="mr-1" />
+                Connected
+              </>
+            ) : (
+              'Test Connection'
+            )}
+          </button>
+        </div>
+      )}
     </div>
   )
 }
