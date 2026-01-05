@@ -18,12 +18,18 @@ const API_BASE = getApiBase()
 class ApiService {
   constructor() {
     this.baseUrl = API_BASE
-    this.defaultTimeout = 10000 // 10 second default timeout
+    this.defaultTimeout = 15000 // 15 second default timeout
+    this.longTimeout = 60000   // 60 seconds for sync/test operations
   }
 
   async request(method, endpoint, options = {}) {
     const url = `${this.baseUrl}${endpoint}`
-    const timeout = options.timeout || this.defaultTimeout
+
+    // Use longer timeout for test/sync endpoints
+    let timeout = options.timeout || this.defaultTimeout
+    if (endpoint.includes('/test/') || endpoint.includes('/sync') || endpoint.includes('/quick')) {
+      timeout = options.timeout || this.longTimeout
+    }
 
     // Create abort controller for timeout
     const controller = new AbortController()

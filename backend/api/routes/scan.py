@@ -288,3 +288,163 @@ async def get_scan_phases():
             {"id": 17, "name": "Codec Analysis", "description": "Identify outdated codecs for modernization"},
         ]
     }
+
+
+@router.get("/movies/quick")
+async def get_movies_quick(db: AsyncSession = Depends(get_db)):
+    """Quick fetch of movies from Plex for setup wizard."""
+    from backend.db.models import Movie, MediaFile
+    from sqlalchemy import func
+
+    config = get_config()
+
+    if not config.plex.is_configured:
+        return {"items": [], "count": 0, "duplicates": 0}
+
+    try:
+        from backend.core.integrations.plex import PlexClient
+        import structlog
+        logger = structlog.get_logger(__name__)
+
+        client = PlexClient(config.plex.url, config.plex.token)
+        plex_movies = await client.get_all_movies()
+
+        # Count duplicates (movies with multiple media files)
+        duplicates = 0
+        for movie in plex_movies:
+            media_list = movie.get("Media", [])
+            if len(media_list) > 1:
+                duplicates += 1
+
+        # Store movies in database
+        added = 0
+        for pm in plex_movies:
+            rating_key = str(pm.get("ratingKey"))
+
+            # Check if exists
+            existing = await db.scalar(
+                select(Movie).where(Movie.plex_rating_key == rating_key)
+            )
+
+            if not existing:
+                # Extract media info
+                media_info = client.extract_media_info(pm)
+                ratings = client.extract_ratings(pm)
+
+                movie = Movie(
+                    plex_rating_key=rating_key,
+                    title=pm.get("title", "Unknown"),
+                    year=pm.get("year"),
+                    sort_title=pm.get("titleSort"),
+                    summary=pm.get("summary"),
+                    tagline=pm.get("tagline"),
+                    duration_ms=pm.get("duration"),
+                    content_rating=pm.get("contentRating"),
+                    studio=pm.get("studio"),
+                    genres=[g.get("tag") for g in pm.get("Genre", [])],
+                    imdb_id=ratings.get("imdb_id"),
+                    tmdb_id=ratings.get("tmdb_id"),
+                    file_path=media_info.get("file_path"),
+                    file_size_bytes=media_info.get("file_size_bytes"),
+                    container=media_info.get("container"),
+                    video_codec=media_info.get("video_codec"),
+                    audio_codec=media_info.get("audio_codec"),
+                    resolution=media_info.get("resolution"),
+                    is_hdr=media_info.get("is_hdr", False),
+                    hdr_type=media_info.get("hdr_type"),
+                    bitrate=media_info.get("bitrate"),
+                    added_at=datetime.utcnow(),
+                    last_scanned=datetime.utcnow(),
+                )
+                db.add(movie)
+                added += 1
+
+        if added > 0:
+            await db.commit()
+            logger.info("Added movies to database", count=added)
+
+        await client.close()
+
+        return {
+            "items": plex_movies,
+            "count": len(plex_movies),
+            "duplicates": duplicates,
+        }
+
+    except Exception as e:
+        import structlog
+        logger = structlog.get_logger(__name__)
+        logger.error("Failed to fetch movies from Plex", error=str(e))
+
+        # Return database count if Plex fails
+        movie_count = await db.scalar(select(func.count(Movie.id))) or 0
+        return {"items": [], "count": movie_count, "duplicates": 0, "error": str(e)}
+
+
+@router.get("/shows/quick")
+async def get_shows_quick(db: AsyncSession = Depends(get_db)):
+    """Quick fetch of TV shows from Plex for setup wizard."""
+    from backend.db.models import TVShow
+    from sqlalchemy import func
+
+    config = get_config()
+
+    if not config.plex.is_configured:
+        return {"items": [], "count": 0}
+
+    try:
+        from backend.core.integrations.plex import PlexClient
+        import structlog
+        logger = structlog.get_logger(__name__)
+
+        client = PlexClient(config.plex.url, config.plex.token)
+        plex_shows = await client.get_all_shows()
+
+        # Store shows in database
+        added = 0
+        for ps in plex_shows:
+            rating_key = str(ps.get("ratingKey"))
+
+            existing = await db.scalar(
+                select(TVShow).where(TVShow.plex_rating_key == rating_key)
+            )
+
+            if not existing:
+                ratings = client.extract_ratings(ps)
+
+                show = TVShow(
+                    plex_rating_key=rating_key,
+                    title=ps.get("title", "Unknown"),
+                    year=ps.get("year"),
+                    sort_title=ps.get("titleSort"),
+                    summary=ps.get("summary"),
+                    content_rating=ps.get("contentRating"),
+                    studio=ps.get("studio"),
+                    genres=[g.get("tag") for g in ps.get("Genre", [])],
+                    imdb_id=ratings.get("imdb_id"),
+                    tmdb_id=ratings.get("tmdb_id"),
+                    tvdb_id=ratings.get("tvdb_id"),
+                    added_at=datetime.utcnow(),
+                    last_scanned=datetime.utcnow(),
+                )
+                db.add(show)
+                added += 1
+
+        if added > 0:
+            await db.commit()
+            logger.info("Added TV shows to database", count=added)
+
+        await client.close()
+
+        return {
+            "items": plex_shows,
+            "count": len(plex_shows),
+        }
+
+    except Exception as e:
+        import structlog
+        logger = structlog.get_logger(__name__)
+        logger.error("Failed to fetch shows from Plex", error=str(e))
+
+        show_count = await db.scalar(select(func.count(TVShow.id))) or 0
+        return {"items": [], "count": show_count, "error": str(e)}

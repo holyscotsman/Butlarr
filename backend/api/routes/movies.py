@@ -330,6 +330,9 @@ async def delete_movie(
 @router.post("/sync")
 async def sync_movies(db: AsyncSession = Depends(get_db)):
     """Sync movies from Plex to database."""
+    import structlog
+    logger = structlog.get_logger(__name__)
+
     config = get_config()
 
     if not config.plex.is_configured:
@@ -339,7 +342,10 @@ async def sync_movies(db: AsyncSession = Depends(get_db)):
 
     try:
         client = PlexClient(config.plex.url, config.plex.token)
+        logger.info("Starting Plex movie sync")
+
         plex_movies = await client.get_all_movies()
+        logger.info("Fetched movies from Plex", count=len(plex_movies))
 
         added = 0
         updated = 0
@@ -353,6 +359,10 @@ async def sync_movies(db: AsyncSession = Depends(get_db)):
         for pm in plex_movies:
             rating_key = str(pm.get("ratingKey"))
 
+            # Extract media info and ratings
+            media_info = client.extract_media_info(pm)
+            ratings = client.extract_ratings(pm)
+
             if rating_key in existing_keys:
                 # Update existing
                 movie = await db.scalar(
@@ -361,8 +371,24 @@ async def sync_movies(db: AsyncSession = Depends(get_db)):
                 if movie:
                     movie.title = pm.get("title", movie.title)
                     movie.year = pm.get("year")
+                    movie.sort_title = pm.get("titleSort")
                     movie.summary = pm.get("summary")
+                    movie.tagline = pm.get("tagline")
                     movie.duration_ms = pm.get("duration")
+                    movie.content_rating = pm.get("contentRating")
+                    movie.studio = pm.get("studio")
+                    movie.genres = [g.get("tag") for g in pm.get("Genre", [])]
+                    movie.imdb_id = ratings.get("imdb_id") or movie.imdb_id
+                    movie.tmdb_id = ratings.get("tmdb_id") or movie.tmdb_id
+                    movie.file_path = media_info.get("file_path") or movie.file_path
+                    movie.file_size_bytes = media_info.get("file_size_bytes") or movie.file_size_bytes
+                    movie.container = media_info.get("container") or movie.container
+                    movie.video_codec = media_info.get("video_codec") or movie.video_codec
+                    movie.audio_codec = media_info.get("audio_codec") or movie.audio_codec
+                    movie.resolution = media_info.get("resolution") or movie.resolution
+                    movie.is_hdr = media_info.get("is_hdr", False)
+                    movie.hdr_type = media_info.get("hdr_type")
+                    movie.bitrate = media_info.get("bitrate") or movie.bitrate
                     movie.last_scanned = datetime.utcnow()
                     updated += 1
             else:
@@ -371,8 +397,24 @@ async def sync_movies(db: AsyncSession = Depends(get_db)):
                     plex_rating_key=rating_key,
                     title=pm.get("title", "Unknown"),
                     year=pm.get("year"),
+                    sort_title=pm.get("titleSort"),
                     summary=pm.get("summary"),
+                    tagline=pm.get("tagline"),
                     duration_ms=pm.get("duration"),
+                    content_rating=pm.get("contentRating"),
+                    studio=pm.get("studio"),
+                    genres=[g.get("tag") for g in pm.get("Genre", [])],
+                    imdb_id=ratings.get("imdb_id"),
+                    tmdb_id=ratings.get("tmdb_id"),
+                    file_path=media_info.get("file_path"),
+                    file_size_bytes=media_info.get("file_size_bytes"),
+                    container=media_info.get("container"),
+                    video_codec=media_info.get("video_codec"),
+                    audio_codec=media_info.get("audio_codec"),
+                    resolution=media_info.get("resolution"),
+                    is_hdr=media_info.get("is_hdr", False),
+                    hdr_type=media_info.get("hdr_type"),
+                    bitrate=media_info.get("bitrate"),
                     added_at=datetime.utcnow(),
                     last_scanned=datetime.utcnow(),
                 )
@@ -380,6 +422,9 @@ async def sync_movies(db: AsyncSession = Depends(get_db)):
                 added += 1
 
         await db.commit()
+        await client.close()
+
+        logger.info("Plex movie sync complete", added=added, updated=updated)
 
         return SyncResponse(
             status="success",
@@ -390,6 +435,7 @@ async def sync_movies(db: AsyncSession = Depends(get_db)):
         )
 
     except Exception as e:
+        logger.error("Plex movie sync failed", error=str(e))
         raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
 
 
