@@ -295,16 +295,21 @@ async def get_movies_quick(db: AsyncSession = Depends(get_db)):
     """Quick fetch of movies from Plex for setup wizard."""
     from backend.db.models import Movie, MediaFile
     from sqlalchemy import func
+    import structlog
+    logger = structlog.get_logger(__name__)
 
     config = get_config()
 
+    logger.info("Movies quick fetch called",
+               plex_configured=config.plex.is_configured,
+               plex_url=config.plex.url[:30] + "..." if config.plex.url else None)
+
     if not config.plex.is_configured:
-        return {"items": [], "count": 0, "duplicates": 0}
+        logger.warning("Plex not configured, returning empty")
+        return {"items": [], "count": 0, "duplicates": 0, "reason": "plex_not_configured"}
 
     try:
         from backend.core.integrations.plex import PlexClient
-        import structlog
-        logger = structlog.get_logger(__name__)
 
         client = PlexClient(config.plex.url, config.plex.token)
         plex_movies = await client.get_all_movies()
@@ -365,6 +370,11 @@ async def get_movies_quick(db: AsyncSession = Depends(get_db)):
 
         await client.close()
 
+        logger.info("Movies quick fetch completed",
+                   plex_count=len(plex_movies),
+                   db_added=added,
+                   duplicates=duplicates)
+
         return {
             "items": plex_movies,
             "count": len(plex_movies),
@@ -372,9 +382,10 @@ async def get_movies_quick(db: AsyncSession = Depends(get_db)):
         }
 
     except Exception as e:
-        import structlog
-        logger = structlog.get_logger(__name__)
-        logger.error("Failed to fetch movies from Plex", error=str(e))
+        import traceback
+        logger.error("Failed to fetch movies from Plex",
+                    error=str(e),
+                    traceback=traceback.format_exc())
 
         # Return database count if Plex fails
         movie_count = await db.scalar(select(func.count(Movie.id))) or 0

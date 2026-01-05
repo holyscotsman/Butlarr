@@ -58,7 +58,12 @@ class PlexClient:
     async def get_libraries(self) -> List[Dict[str, Any]]:
         """Get all libraries."""
         data = await self._request("GET", "/library/sections")
-        return data.get("MediaContainer", {}).get("Directory", [])
+        libraries = data.get("MediaContainer", {}).get("Directory", [])
+        logger.info("Plex libraries found",
+                   count=len(libraries),
+                   types=[lib.get("type") for lib in libraries],
+                   titles=[lib.get("title") for lib in libraries])
+        return libraries
     
     async def get_library_items_paginated(self, library_key: str, page_size: int = 200) -> List[Dict[str, Any]]:
         """Get all items in a library with proper pagination."""
@@ -134,18 +139,28 @@ class PlexClient:
         """Get all movies from all movie libraries with pagination."""
         libraries = await self.get_libraries()
         movies = []
-        
-        for lib in libraries:
-            if lib.get("type") == "movie":
-                try:
-                    logger.info("Fetching movies from library", library=lib.get("title"))
-                    lib_movies = await self.get_library_items_paginated(lib["key"])
-                    movies.extend(lib_movies)
-                    logger.info("Fetched movies", library=lib.get("title"), count=len(lib_movies))
-                except Exception as e:
-                    logger.error("Failed to get movies from library", 
-                                library=lib.get("title"), error=str(e))
-        
+
+        movie_libs = [lib for lib in libraries if lib.get("type") == "movie"]
+        logger.info("Movie libraries found", count=len(movie_libs))
+
+        if not movie_libs:
+            logger.warning("No movie libraries found in Plex",
+                         all_library_types=[lib.get("type") for lib in libraries])
+            return []
+
+        for lib in movie_libs:
+            try:
+                logger.info("Fetching movies from library",
+                           library=lib.get("title"),
+                           key=lib.get("key"))
+                lib_movies = await self.get_library_items_paginated(lib["key"])
+                movies.extend(lib_movies)
+                logger.info("Fetched movies", library=lib.get("title"), count=len(lib_movies))
+            except Exception as e:
+                logger.error("Failed to get movies from library",
+                            library=lib.get("title"), error=str(e))
+
+        logger.info("Total movies fetched from Plex", total=len(movies))
         return movies
     
     async def get_all_shows(self) -> List[Dict[str, Any]]:
