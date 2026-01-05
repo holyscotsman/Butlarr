@@ -12,8 +12,11 @@ from functools import lru_cache
 
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings
+import structlog
 
 from backend.utils.version import VERSION
+
+logger = structlog.get_logger(__name__)
 
 
 class PlexConfig(BaseModel):
@@ -260,19 +263,38 @@ def get_config_path() -> Path:
 def load_config() -> AppConfig:
     """Load application configuration from file."""
     config_path = get_config_path()
-    
+
+    logger.debug("Loading config", path=str(config_path), exists=config_path.exists())
+
     if config_path.exists():
         try:
             with open(config_path, "r") as f:
-                data = json.load(f)
-            return AppConfig(**data)
-        except Exception:
-            pass
-    
+                raw_data = f.read()
+                data = json.loads(raw_data)
+
+            # Create config from file data
+            config = AppConfig(**data)
+            logger.info("Config loaded from file",
+                       path=str(config_path),
+                       plex_configured=config.plex.is_configured,
+                       setup_complete=config.setup_complete)
+            return config
+        except json.JSONDecodeError as e:
+            logger.error("Config file has invalid JSON",
+                        path=str(config_path),
+                        error=str(e))
+        except Exception as e:
+            logger.error("Failed to load config from file",
+                        path=str(config_path),
+                        error=str(e),
+                        error_type=type(e).__name__)
+    else:
+        logger.info("Config file not found, using defaults", path=str(config_path))
+
     # Return default config with environment values applied
     settings = get_settings()
     config = AppConfig()
-    
+
     # Apply environment values
     config.plex.url = settings.plex_url
     config.plex.token = settings.plex_token
@@ -290,17 +312,43 @@ def load_config() -> AppConfig:
     config.ai.anthropic_api_key = settings.anthropic_api_key
     config.ai.openai_api_key = settings.openai_api_key
     config.ai.ollama_url = settings.ollama_url
-    
+
+    logger.info("Using default config with env values",
+               plex_url_set=bool(settings.plex_url),
+               plex_token_set=bool(settings.plex_token))
+
     return config
 
 
 def save_config(config: AppConfig) -> None:
     """Save application configuration to file."""
     config_path = get_config_path()
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    
-    with open(config_path, "w") as f:
-        json.dump(config.model_dump(), f, indent=2, default=str)
+
+    try:
+        # Ensure directory exists
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        logger.debug("Saving config", path=str(config_path))
+
+        # Write config to file
+        config_data = config.model_dump()
+        with open(config_path, "w") as f:
+            json.dump(config_data, f, indent=2, default=str)
+
+        logger.info("Config saved successfully",
+                   path=str(config_path),
+                   plex_configured=config.plex.is_configured,
+                   setup_complete=config.setup_complete)
+    except PermissionError as e:
+        logger.error("Permission denied saving config",
+                    path=str(config_path),
+                    error=str(e))
+        raise
+    except Exception as e:
+        logger.error("Failed to save config",
+                    path=str(config_path),
+                    error=str(e),
+                    error_type=type(e).__name__)
+        raise
 
 
 def get_config() -> AppConfig:
@@ -318,26 +366,34 @@ def get_config() -> AppConfig:
 def update_config(updates: Dict[str, Any]) -> AppConfig:
     """Update configuration with new values (thread-safe)."""
     global _config_instance
-    
+
+    logger.debug("Updating config", updates_keys=list(updates.keys()))
+
     with _config_lock:
         config = get_config()
-        
+
         config_dict = config.model_dump()
         _deep_merge(config_dict, updates)
-        
+
         _config_instance = AppConfig(**config_dict)
         save_config(_config_instance)
-        
+
+        logger.info("Config updated",
+                   plex_configured=_config_instance.plex.is_configured,
+                   setup_complete=_config_instance.setup_complete)
+
     return _config_instance
 
 
 def reload_config() -> AppConfig:
     """Force reload configuration from disk."""
     global _config_instance
-    
+
+    logger.info("Reloading config from disk")
+
     with _config_lock:
         _config_instance = load_config()
-    
+
     return _config_instance
 
 
