@@ -35,7 +35,7 @@ INSTALL_DIR="${BUTLARR_INSTALL_DIR:-/mnt/user/appdata/butlarr}"
 
 if [ ! -d "$INSTALL_DIR/.git" ]; then
     echo -e "${YELLOW}No installation found. Running full install...${NC}"
-    curl -fsSL https://raw.githubusercontent.com/holyscotsman/Butlarr/claude/setup-butlarr-plex-manager-pFtxL/install.sh | bash
+    curl -fsSL https://raw.githubusercontent.com/holyscotsman/Butlarr/claude/fix-loading-spinner-M7Llz/install.sh | bash
     exit 0
 fi
 
