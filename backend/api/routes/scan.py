@@ -291,27 +291,39 @@ async def get_scan_phases():
 
 
 @router.get("/movies/quick")
-async def get_movies_quick(db: AsyncSession = Depends(get_db)):
-    """Quick fetch of movies from Plex for setup wizard."""
+async def get_movies_quick(
+    plex_url: Optional[str] = None,
+    plex_token: Optional[str] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """Quick fetch of movies from Plex.
+
+    Can pass plex_url and plex_token directly (for setup wizard)
+    or will fall back to saved config.
+    """
     from backend.db.models import Movie, MediaFile
     from sqlalchemy import func
     import structlog
     logger = structlog.get_logger(__name__)
 
-    config = get_config()
-
-    logger.info("Movies quick fetch called",
-               plex_configured=config.plex.is_configured,
-               plex_url=config.plex.url[:30] + "..." if config.plex.url else None)
-
-    if not config.plex.is_configured:
-        logger.warning("Plex not configured, returning empty")
-        return {"items": [], "count": 0, "duplicates": 0, "reason": "plex_not_configured"}
+    # Use provided credentials or fall back to config
+    if plex_url and plex_token:
+        url = plex_url
+        token = plex_token
+        logger.info("Using provided Plex credentials for quick fetch")
+    else:
+        config = get_config()
+        if not config.plex.is_configured:
+            logger.warning("Plex not configured, returning empty")
+            return {"items": [], "count": 0, "duplicates": 0, "reason": "plex_not_configured"}
+        url = config.plex.url
+        token = config.plex.token
+        logger.info("Using saved config for quick fetch")
 
     try:
         from backend.core.integrations.plex import PlexClient
 
-        client = PlexClient(config.plex.url, config.plex.token)
+        client = PlexClient(url, token)
         plex_movies = await client.get_all_movies()
 
         # Count duplicates (movies with multiple media files)
@@ -393,22 +405,37 @@ async def get_movies_quick(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/shows/quick")
-async def get_shows_quick(db: AsyncSession = Depends(get_db)):
-    """Quick fetch of TV shows from Plex for setup wizard."""
+async def get_shows_quick(
+    plex_url: Optional[str] = None,
+    plex_token: Optional[str] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """Quick fetch of TV shows from Plex.
+
+    Can pass plex_url and plex_token directly (for setup wizard)
+    or will fall back to saved config.
+    """
     from backend.db.models import TVShow
     from sqlalchemy import func
+    import structlog
+    logger = structlog.get_logger(__name__)
 
-    config = get_config()
-
-    if not config.plex.is_configured:
-        return {"items": [], "count": 0}
+    # Use provided credentials or fall back to config
+    if plex_url and plex_token:
+        url = plex_url
+        token = plex_token
+        logger.info("Using provided Plex credentials for shows fetch")
+    else:
+        config = get_config()
+        if not config.plex.is_configured:
+            return {"items": [], "count": 0}
+        url = config.plex.url
+        token = config.plex.token
 
     try:
         from backend.core.integrations.plex import PlexClient
-        import structlog
-        logger = structlog.get_logger(__name__)
 
-        client = PlexClient(config.plex.url, config.plex.token)
+        client = PlexClient(url, token)
         plex_shows = await client.get_all_shows()
 
         # Store shows in database

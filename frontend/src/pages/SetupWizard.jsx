@@ -102,14 +102,22 @@ export default function SetupWizard({ onComplete }) {
     }
   }
 
-  // Fetch library data from Plex
+  // Fetch library data from Plex - pass credentials directly to avoid config timing issues
   const fetchLibrary = async () => {
     setLibraryLoading(true)
     try {
+      // Pass Plex credentials directly as query params
+      const params = new URLSearchParams({
+        plex_url: plex.url,
+        plex_token: plex.token
+      })
+
       const [movies, shows] = await Promise.all([
-        api.get('/api/scan/movies/quick'),
-        api.get('/api/scan/shows/quick'),
+        api.get(`/api/scan/movies/quick?${params}`),
+        api.get(`/api/scan/shows/quick?${params}`),
       ])
+
+      console.log('Library fetch result:', { movies, shows })
 
       setLibraryData({
         movies: movies.items || movies || [],
