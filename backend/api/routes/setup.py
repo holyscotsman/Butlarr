@@ -128,11 +128,34 @@ async def get_setup_status():
 
 @router.post("/test/plex", response_model=ServiceTestResponse)
 async def test_plex_connection(request: PlexSetupRequest):
-    """Test Plex server connection."""
+    """Test Plex server connection and fetch library info."""
     try:
         client = PlexClient(request.url, request.token)
         info = await client.get_server_info()
-        
+
+        # Also fetch libraries to verify full access
+        libraries = await client.get_libraries()
+        movie_libs = [lib for lib in libraries if lib.get("type") == "movie"]
+        show_libs = [lib for lib in libraries if lib.get("type") == "show"]
+
+        # Count movies in first movie library (quick check)
+        movie_count = 0
+        show_count = 0
+        if movie_libs:
+            try:
+                movies = await client.get_library_items_paginated(movie_libs[0]["key"])
+                movie_count = len(movies)
+            except Exception:
+                pass
+        if show_libs:
+            try:
+                shows = await client.get_library_items_paginated(show_libs[0]["key"])
+                show_count = len(shows)
+            except Exception:
+                pass
+
+        await client.close()
+
         return ServiceTestResponse(
             success=True,
             message=f"Connected to {info.get('friendlyName', 'Plex Server')}",
@@ -140,6 +163,13 @@ async def test_plex_connection(request: PlexSetupRequest):
                 "server_name": info.get("friendlyName"),
                 "version": info.get("version"),
                 "platform": info.get("platform"),
+                "libraries": len(libraries),
+                "library_types": [lib.get("type") for lib in libraries],
+                "library_names": [lib.get("title") for lib in libraries],
+                "movie_libraries": len(movie_libs),
+                "show_libraries": len(show_libs),
+                "movie_count": movie_count,
+                "show_count": show_count,
             }
         )
     except Exception as e:

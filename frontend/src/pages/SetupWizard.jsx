@@ -81,22 +81,46 @@ export default function SetupWizard({ onComplete }) {
   const testPlex = async () => {
     setPlexTesting(true)
     setPlexResult(null)
+    setLibraryLoading(true)
 
     try {
       const result = await api.post('/api/setup/test/plex', plex)
 
+      console.log('Plex test result:', result)
+
       if (result.success) {
         await api.post('/api/setup/configure/plex', plex)
         setPlexConnected(true)
-        setPlexResult({ success: true, message: result.message })
+        setPlexResult({ success: true, message: result.message, details: result.details })
 
-        // Immediately start fetching library
-        fetchLibrary()
+        // Use library info from test result directly (more reliable)
+        if (result.details) {
+          setLibraryData({
+            movies: [],
+            shows: [],
+            movieCount: result.details.movie_count || 0,
+            showCount: result.details.show_count || 0,
+            duplicates: 0,
+            libraryTypes: result.details.library_types || [],
+            libraryNames: result.details.library_names || [],
+          })
+          setLibraryLoading(false)
+
+          // If test found movies, also do a full fetch to store in DB
+          if (result.details.movie_count > 0 || result.details.show_count > 0) {
+            fetchLibrary()
+          }
+        } else {
+          // Fallback to separate fetch
+          fetchLibrary()
+        }
       } else {
         setPlexResult({ success: false, message: result.message })
+        setLibraryLoading(false)
       }
     } catch (error) {
       setPlexResult({ success: false, message: error.message })
+      setLibraryLoading(false)
     } finally {
       setPlexTesting(false)
     }
@@ -351,23 +375,39 @@ export default function SetupWizard({ onComplete }) {
                     <span>Fetching library data...</span>
                   </div>
                 ) : libraryData ? (
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="text-center p-3 bg-cyber-darker rounded-lg">
-                      <Film size={24} className="mx-auto mb-1 text-cyber-accent" />
-                      <p className="text-2xl font-bold">{libraryData.movieCount}</p>
-                      <p className="text-xs text-gray-400">Movies</p>
+                  <>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="text-center p-3 bg-cyber-darker rounded-lg">
+                        <Film size={24} className="mx-auto mb-1 text-cyber-accent" />
+                        <p className="text-2xl font-bold">{libraryData.movieCount}</p>
+                        <p className="text-xs text-gray-400">Movies</p>
+                      </div>
+                      <div className="text-center p-3 bg-cyber-darker rounded-lg">
+                        <Tv size={24} className="mx-auto mb-1 text-cyber-accent" />
+                        <p className="text-2xl font-bold">{libraryData.showCount}</p>
+                        <p className="text-xs text-gray-400">TV Shows</p>
+                      </div>
+                      <div className="text-center p-3 bg-cyber-darker rounded-lg">
+                        <AlertTriangle size={24} className="mx-auto mb-1 text-cyber-yellow" />
+                        <p className="text-2xl font-bold">{libraryData.duplicates}</p>
+                        <p className="text-xs text-gray-400">Duplicates</p>
+                      </div>
                     </div>
-                    <div className="text-center p-3 bg-cyber-darker rounded-lg">
-                      <Tv size={24} className="mx-auto mb-1 text-cyber-accent" />
-                      <p className="text-2xl font-bold">{libraryData.showCount}</p>
-                      <p className="text-xs text-gray-400">TV Shows</p>
-                    </div>
-                    <div className="text-center p-3 bg-cyber-darker rounded-lg">
-                      <AlertTriangle size={24} className="mx-auto mb-1 text-cyber-yellow" />
-                      <p className="text-2xl font-bold">{libraryData.duplicates}</p>
-                      <p className="text-xs text-gray-400">Duplicates</p>
-                    </div>
-                  </div>
+
+                    {/* Diagnostic info if no movies found */}
+                    {libraryData.movieCount === 0 && libraryData.libraryNames && libraryData.libraryNames.length > 0 && (
+                      <div className="mt-4 p-3 bg-cyber-darker rounded-lg text-sm">
+                        <p className="text-gray-400 mb-1">Found libraries: {libraryData.libraryNames.join(', ')}</p>
+                        <p className="text-gray-500">Types: {libraryData.libraryTypes?.join(', ') || 'unknown'}</p>
+                      </div>
+                    )}
+
+                    {libraryData.movieCount === 0 && (!libraryData.libraryNames || libraryData.libraryNames.length === 0) && (
+                      <div className="mt-4 p-3 bg-cyber-red/10 border border-cyber-red/30 rounded-lg text-sm text-cyber-red">
+                        <p>No libraries found. Check Plex server permissions.</p>
+                      </div>
+                    )}
+                  </>
                 ) : null}
               </div>
             )}
